@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FISH Telemetry</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">◆</span>
+                    <span class="logo-text">FISH TELEMETRY</span>
+                </div>
+                <div class="vehicle-info">
+                    <span id="vehicleName" class="vehicle-name">No Vehicle</span>
+                    <span id="vehiclePlate" class="vehicle-plate">---</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="recordingIndicator" class="recording-indicator">
+                    <span class="rec-dot"></span>
+                    <span class="rec-text">REC</span>
+                </div>
+                <button id="btnClose" class="btn-close" title="Close">✕</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Speedometer Section -->
+            <section class="speedometer-section">
+                <div class="speed-display">
+                    <div class="speed-value-container">
+                        <span id="currentSpeed" class="speed-value">0</span>
+                        <span class="speed-unit">km/h</span>
+                    </div>
+                    <div class="speed-bar-track">
+                        <div id="speedBar" class="speed-bar-fill"></div>
+                    </div>
+                    <div class="speed-labels">
+                        <span>0</span>
+                        <span>100</span>
+                        <span>200</span>
+                        <span>300</span>
+                        <span>400+</span>
+                    </div>
+                </div>
+                <div class="max-speed-display">
+                    <span class="max-speed-label">MAX</span>
+                    <span id="maxSpeed" class="max-speed-value">0</span>
+                    <span class="max-speed-unit">km/h</span>
+                </div>
+            </section>
+
+            <!-- Stats Grid -->
+            <section class="stats-grid">
+                <!-- 0-100 -->
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">0-100 km/h</span>
+                        <span class="stat-icon">⚡</span>
+                    </div>
+                    <div class="stat-values">
+                        <div class="stat-best">
+                            <span class="stat-best-label">BEST</span>
+                            <span id="best0_100" class="stat-number best">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                        <div class="stat-last">
+                            <span class="stat-last-label">LAST</span>
+                            <span id="last0_100" class="stat-number last">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                    </div>
+                    <div class="stat-bar-track">
+                        <div id="bar0_100" class="stat-bar-fill accent-blue"></div>
+                    </div>
+                </div>
+
+                <!-- 0-200 -->
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">0-200 km/h</span>
+                        <span class="stat-icon">🚀</span>
+                    </div>
+                    <div class="stat-values">
+                        <div class="stat-best">
+                            <span class="stat-best-label">BEST</span>
+                            <span id="best0_200" class="stat-number best">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                        <div class="stat-last">
+                            <span class="stat-last-label">LAST</span>
+                            <span id="last0_200" class="stat-number last">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                    </div>
+                    <div class="stat-bar-track">
+                        <div id="bar0_200" class="stat-bar-fill accent-blue"></div>
+                    </div>
+                </div>
+
+                <!-- 100-0 -->
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">100-0 km/h</span>
+                        <span class="stat-icon">🛑</span>
+                    </div>
+                    <div class="stat-values">
+                        <div class="stat-best">
+                            <span class="stat-best-label">BEST</span>
+                            <span id="best100_0" class="stat-number best">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                        <div class="stat-last">
+                            <span class="stat-last-label">LAST</span>
+                            <span id="last100_0" class="stat-number last">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                    </div>
+                    <div class="stat-bar-track">
+                        <div id="bar100_0" class="stat-bar-fill accent-green"></div>
+                    </div>
+                </div>
+
+                <!-- 200-0 -->
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">200-0 km/h</span>
+                        <span class="stat-icon">🔴</span>
+                    </div>
+                    <div class="stat-values">
+                        <div class="stat-best">
+                            <span class="stat-best-label">BEST</span>
+                            <span id="best200_0" class="stat-number best">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                        <div class="stat-last">
+                            <span class="stat-last-label">LAST</span>
+                            <span id="last200_0" class="stat-number last">--</span>
+                            <span class="stat-suffix">s</span>
+                        </div>
+                    </div>
+                    <div class="stat-bar-track">
+                        <div id="bar200_0" class="stat-bar-fill accent-green"></div>
+                    </div>
+                </div>
+
+                <!-- Lateral G -->
+                <div class="stat-card stat-card-wide">
+                    <div class="stat-header">
+                        <span class="stat-label">Lateral G-Force</span>
+                        <span class="stat-icon">🔄</span>
+                    </div>
+                    <div class="stat-values">
+                        <div class="stat-best">
+                            <span class="stat-best-label">BEST</span>
+                            <span id="bestGforce" class="stat-number best">--</span>
+                            <span class="stat-suffix">G</span>
+                        </div>
+                        <div class="stat-last">
+                            <span class="stat-last-label">LAST</span>
+                            <span id="lastGforce" class="stat-number last">--</span>
+                            <span class="stat-suffix">G</span>
+                        </div>
+                    </div>
+                    <div class="stat-bar-track">
+                        <div id="barGforce" class="stat-bar-fill accent-purple"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Version Comparison -->
+            <section id="versionSection" class="version-section hidden">
+                <h3 class="section-title">Version Comparison</h3>
+                <div class="version-table-wrapper">
+                    <table class="version-table">
+                        <thead>
+                            <tr>
+                                <th>Ver</th>
+                                <th>Max Speed</th>
+                                <th>0-100</th>
+                                <th>0-200</th>
+                                <th>100-0</th>
+                                <th>200-0</th>
+                                <th>Lat G</th>
+                            </tr>
+                        </thead>
+                        <tbody id="versionTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Controls -->
+            <section class="controls">
+                <button id="btnToggleRecording" class="btn btn-primary">
+                    <span class="btn-icon">⏺</span>
+                    <span class="btn-label">START RECORDING</span>
+                </button>
+                <button id="btnClear" class="btn btn-secondary">
+                    <span class="btn-icon">🗑</span>
+                    <span class="btn-label">CLEAR DATA</span>
+                </button>
+                <button id="btnCopy" class="btn btn-secondary">
+                    <span class="btn-icon">📋</span>
+                    <span class="btn-label">COPY RESULTS</span>
+                </button>
+            </section>
+
+            <!-- Nearby Ratings (shown when holding K) -->
+            <section id="nearbyRatings" class="nearby-ratings hidden">
+                <h3 class="section-title">Nearby Vehicle Ratings</h3>
+                <div id="ratingsList" class="ratings-list">
+                    <p class="no-data">No nearby vehicles with telemetry data</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Toast notification -->
+        <div id="toast" class="toast hidden">
+            <span id="toastText"></span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

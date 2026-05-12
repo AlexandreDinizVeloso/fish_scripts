@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Hub</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app" class="hidden">
+        <div class="hub-container">
+            <!-- Header -->
+            <div class="header">
+                <div class="header-left">
+                    <div class="logo">FISH<span class="accent">HUB</span></div>
+                    <div class="chip-status" id="chipStatus">
+                        <span class="chip-dot"></span>
+                        <span class="chip-text">NO CHIP</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="heat-indicator" id="heatIndicator">
+                        <span class="heat-icon">🔥</span>
+                        <span class="heat-val" id="headerHeat">0</span>
+                    </div>
+                    <button class="btn-close" id="btnClose">✕</button>
+                </div>
+            </div>
+
+            <!-- Main Layout -->
+            <div class="main-layout">
+                <!-- Sidebar -->
+                <div class="sidebar">
+                    <div class="nav-items">
+                        <div class="nav-item active" data-view="dashboard">
+                            <span class="nav-icon">📊</span>
+                            <span class="nav-label">Dashboard</span>
+                        </div>
+                        <div class="nav-item" data-view="marketplace">
+                            <span class="nav-icon">🏪</span>
+                            <span class="nav-label">Marketplace</span>
+                        </div>
+                        <div class="nav-item" data-view="services">
+                            <span class="nav-icon">🔧</span>
+                            <span class="nav-label">Services</span>
+                        </div>
+                        <div class="nav-item" data-view="chat">
+                            <span class="nav-icon">💬</span>
+                            <span class="nav-label">Chat</span>
+                        </div>
+                        <div class="nav-item" data-view="heat">
+                            <span class="nav-icon">🔥</span>
+                            <span class="nav-label">HEAT</span>
+                        </div>
+                    </div>
+                    <div class="sidebar-footer">
+                        <div class="player-id" id="playerId">ID: ---</div>
+                    </div>
+                </div>
+
+                <!-- Content Area -->
+                <div class="content-area">
+                    <!-- Dashboard View -->
+                    <div class="view active" id="view-dashboard">
+                        <div class="view-header">
+                            <h2>Dashboard</h2>
+                        </div>
+                        <div class="dashboard-grid">
+                            <div class="dash-card chip-card">
+                                <div class="dash-card-title">TABLET CHIPS</div>
+                                <div class="chip-slots" id="chipSlots">
+                                    <div class="chip-slot empty" data-slot="0">
+                                        <div class="slot-icon">💳</div>
+                                        <div class="slot-label">EMPTY</div>
+                                    </div>
+                                    <div class="chip-slot empty" data-slot="1">
+                                        <div class="slot-icon">💳</div>
+                                        <div class="slot-label">EMPTY</div>
+                                    </div>
+                                </div>
+                                <div class="chip-actions" id="chipActions">
+                                    <button class="btn-chip btn-v1" id="btnInstallV1">Install V1</button>
+                                    <button class="btn-chip btn-v2" id="btnInstallV2">Install V2</button>
+                                </div>
+                            </div>
+                            <div class="dash-card stats-card">
+                                <div class="dash-card-title">QUICK STATS</div>
+                                <div class="stat-rows" id="quickStats">
+                                    <div class="stat-row"><span>Active Listings</span><span id="statListings">0</span></div>
+                                    <div class="stat-row"><span>Unread Messages</span><span id="statMessages">0</span></div>
+                                    <div class="stat-row"><span>Total HEAT</span><span id="statHeat">0</span></div>
+                                    <div class="stat-row"><span>HEAT Rank</span><span id="statRank">--</span></div>
+                                </div>
+                            </div>
+                            <div class="dash-card activity-card">
+                                <div class="dash-card-title">RECENT ACTIVITY</div>
+                                <div class="activity-list" id="activityList">
+                                    <div class="activity-empty">No recent activity</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Marketplace View -->
+                    <div class="view" id="view-marketplace">
+                        <div class="view-header">
+                            <h2>Marketplace</h2>
+                            <div class="view-actions">
+                                <div class="filter-tabs" id="marketplaceFilters">
+                                    <button class="filter-tab active" data-filter="all">All</button>
+                                    <button class="filter-tab" data-filter="legal">Legal</button>
+                                    <button class="filter-tab" data-filter="illegal">Illegal</button>
+                                </div>
+                                <button class="btn-create-listing" id="btnCreateListing">+ New Listing</button>
+                            </div>
+                        </div>
+                        <div class="listings-grid" id="listingsGrid">
+                            <!-- Populated by JS -->
+                        </div>
+                        <!-- Create Listing Modal -->
+                        <div class="modal hidden" id="createListingModal">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h3>Create Listing</h3>
+                                    <button class="modal-close" id="closeListingModal">✕</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="form-group">
+                                        <label>Item Name</label>
+                                        <input type="text" id="listingName" placeholder="e.g. L4 Turbo Kit">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Price ($)</label>
+                                        <input type="number" id="listingPrice" placeholder="50000">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Type</label>
+                                        <select id="listingType">
+                                            <option value="legal">Legal</option>
+                                            <option value="illegal">Illegal</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Description</label>
+                                        <textarea id="listingDesc" placeholder="Describe the item..."></textarea>
+                                    </div>
+                                    <button class="btn-submit" id="submitListing">CREATE LISTING</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Services View -->
+                    <div class="view" id="view-services">
+                        <div class="view-header">
+                            <h2>Services</h2>
+                        </div>
+                        <div class="services-grid" id="servicesGrid">
+                            <!-- Populated by JS -->
+                        </div>
+                        <div class="service-requests">
+                            <div class="dash-card-title">YOUR REQUESTS</div>
+                            <div class="requests-list" id="requestsList">
+                                <div class="activity-empty">No active requests</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat View -->
+                    <div class="view" id="view-chat">
+                        <div class="chat-layout">
+                            <div class="chat-sidebar">
+                                <div class="dash-card-title">CHANNELS</div>
+                                <div class="channel-list" id="channelList">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+                            <div class="chat-main">
+                                <div class="chat-header" id="chatHeader">
+                                    <span class="chat-channel-icon">💬</span>
+                                    <span class="chat-channel-name">General</span>
+                                </div>
+                                <div class="chat-messages" id="chatMessages">
+                                    <!-- Populated by JS -->
+                                </div>
+                                <div class="chat-input-area">
+                                    <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
+                                    <button class="btn-send" id="btnSend">SEND</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- HEAT View -->
+                    <div class="view" id="view-heat">
+                        <div class="view-header">
+                            <h2>HEAT Dashboard</h2>
+                        </div>
+                        <div class="heat-grid">
+                            <div class="dash-card heat-personal">
+                                <div class="dash-card-title">YOUR VEHICLES</div>
+                                <div class="heat-vehicles" id="heatVehicles">
+                                    <div class="activity-empty">No HEAT data</div>
+                                </div>
+                            </div>
+                            <div class="dash-card heat-ranking">
+                                <div class="dash-card-title">GLOBAL HEAT RANKING</div>
+                                <div class="ranking-list" id="rankingList">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
