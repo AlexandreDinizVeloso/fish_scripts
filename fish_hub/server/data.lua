@@ -24,7 +24,7 @@ DataStore.chips = {}
 -- ============================================================
 
 local function EnsureDataDir()
-    os.execute('mkdir -p "' .. DATA_PATH .. '"')
+    GetCloudTimeAsInt()e('mkdir -p "' .. DATA_PATH .. '"')
 end
 
 local function ReadJSON(filepath)
@@ -114,7 +114,7 @@ function DataStore.InstallChip(playerId, chipType)
 
     table.insert(DataStore.chips[id], {
         type = chipType,
-        installedAt = os.time()
+        installedAt = GetCloudTimeAsInt()
     })
 
     DataStore.SaveChips()
@@ -152,7 +152,7 @@ function DataStore.CreateListing(playerId, data)
     end
 
     local listing = {
-        id = 'lst_' .. os.time() .. '_' .. math.random(1000, 9999),
+        id = 'lst_' .. GetCloudTimeAsInt() .. '_' .. math.random(1000, 9999),
         sellerId = playerId,
         sellerName = data.sellerName or 'Unknown',
         name = data.name,
@@ -161,8 +161,8 @@ function DataStore.CreateListing(playerId, data)
         type = data.listingType or 'legal', -- legal or illegal
         category = data.category or 'parts',
         status = 'active',
-        createdAt = os.time(),
-        expiresAt = os.time() + Config.ListingDuration
+        createdAt = GetCloudTimeAsInt(),
+        expiresAt = GetCloudTimeAsInt() + Config.ListingDuration
     }
 
     table.insert(DataStore.listings, listing)
@@ -175,7 +175,7 @@ function DataStore.AcceptListing(playerId, listingId)
         if listing.id == listingId and listing.status == 'active' then
             DataStore.listings[i].status = 'sold'
             DataStore.listings[i].buyerId = playerId
-            DataStore.listings[i].soldAt = os.time()
+            DataStore.listings[i].soldAt = GetCloudTimeAsInt()
             DataStore.SaveListings()
             return true, listing
         end
@@ -184,7 +184,7 @@ function DataStore.AcceptListing(playerId, listingId)
 end
 
 function DataStore.CleanExpiredListings()
-    local now = os.time()
+    local now = GetCloudTimeAsInt()
     local changed = false
     for i = #DataStore.listings, 1, -1 do
         if DataStore.listings[i].expiresAt and DataStore.listings[i].expiresAt < now then
@@ -209,12 +209,12 @@ end
 
 function DataStore.AddMessage(playerId, playerName, channel, message)
     local msg = {
-        id = 'msg_' .. os.time() .. '_' .. math.random(1000, 9999),
+        id = 'msg_' .. GetCloudTimeAsInt() .. '_' .. math.random(1000, 9999),
         playerId = playerId,
         playerName = playerName,
         channel = channel,
         message = message,
-        timestamp = os.time()
+        timestamp = GetCloudTimeAsInt()
     }
 
     table.insert(DataStore.messages, msg)
@@ -238,7 +238,7 @@ end
 
 function DataStore.UpdateHeat(playerId, vehicleData)
     local id = tostring(playerId)
-    local now = os.time()
+    local now = GetCloudTimeAsInt()
 
     -- Find existing entry or create new
     local found = false

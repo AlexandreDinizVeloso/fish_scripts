@@ -337,7 +337,7 @@ RegisterNUICallback('confirmNormalization', function(data, cb)
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
     if vehicleData[plate] then
         vehicleData[plate].normalized = true
-        vehicleData[plate].normalizedAt = os.time()
+        vehicleData[plate].normalizedAt = GetCloudTimeAsInt()
         TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate])
         ShowNotification('~g~Vehicle normalized successfully!')
     end

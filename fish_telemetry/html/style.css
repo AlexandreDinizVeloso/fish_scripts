@@ -39,9 +39,11 @@ body {
 }
 
 #app {
-    width: 520px;
-    max-height: 90vh;
-    margin: 20px auto;
+    width: 380px; /* Reduzido para não poluir a tela */
+    position: absolute;
+    right: 2vw; /* Ancorado à direita com distância segura (Safezone) */
+    top: 50%;
+    transform: translateY(-50%);
     background: var(--bg-primary);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -52,11 +54,16 @@ body {
     display: flex;
     flex-direction: column;
     transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none; /* Deixa os cliques passarem direto para a Engine caso sobreponha algo */
+}
+
+#app:not(.hidden) {
+    pointer-events: auto; 
 }
 
 #app.hidden {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(-40%) translateX(20px); /* Animação de saída pela direita */
     pointer-events: none;
 }
 

@@ -33,7 +33,8 @@ exports {
     'GetVehicleRank',
     'GetVehicleArchetype',
     'GetVehicleScore',
-    'GetVehicleData'
+    'GetVehicleData',
+    'GetArchetypeModifier'
 }
 
 server_exports {

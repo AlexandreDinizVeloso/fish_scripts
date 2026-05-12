@@ -229,7 +229,7 @@ RegisterNUICallback('confirmRemap', function(data, cb)
         adjustments = data.adjustments or {},
         blendedStats = data.blendedStats or {},
         finalStats = data.finalStats or {},
-        remapTime = os.time(),
+        remapTime = GetCloudTimeAsInt(),
         owner = GetPlayerServerId(PlayerId())
     }
 

@@ -44,7 +44,7 @@ AddEventHandler('fish_normalizer:saveData', function(plate, data)
 
     vehicleDataCache[plate] = data
     vehicleDataCache[plate].owner = GetPlayerIdentifier(src, 0)
-    vehicleDataCache[plate].lastUpdated = os.time()
+    vehicleDataCache[plate].lastUpdated = GetCloudTimeAsInt()
 
     SaveVehicleDataToFile()
 

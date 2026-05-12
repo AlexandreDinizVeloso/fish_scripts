@@ -227,6 +227,7 @@ end
 -- Start recording
 function StartRecording()
     if isRecording then return end
+
     if not IsPlayerDriving() then
         ShowNotification("~r~You must be driving a vehicle to record telemetry.")
         return
@@ -256,7 +257,13 @@ function StartRecording()
             Citizen.Wait(Config.RecordingInterval)
         end
     end)
-
+    nuiOpen = true
+    SendNUIMessage({
+        type = 'openTelemetry',
+        vehicleName = currentData.vehicleName,
+        plate = currentData.plate,
+        recording = true
+    })
     ShowNotification("~g~Telemetry recording started.")
 end
 
@@ -280,7 +287,7 @@ function StopRecording()
         two_hundred_to_zero = milestone_200_0,
         lateral_gforce = maxLateralG,
         version = currentVersion,
-        timestamp = os.time(),
+        timestamp = GetCloudTimeAsInt(),
         duration = (GetGameTimer() - recordingStartTime) / 1000.0
     }
 
@@ -324,7 +331,10 @@ function StopRecording()
         best = bestResults,
         versions = vehicleVersions
     })
-
+    SendNUIMessage({
+        type = 'copySuccess',
+        text = string.format("Veículo: %s | Max Speed: %.1f km/h | 0-100: %.2fs", result.vehicle_name, result.max_speed, result.zero_to_100 or 0.0)
+    })
     ShowNotification("~b~Telemetry recording stopped. Max speed: " .. string.format("%.1f", result.max_speed) .. " km/h")
 end
 
