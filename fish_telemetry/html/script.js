@@ -304,21 +304,40 @@
                         statElements['0_100'].last.textContent = data.milestones.zero_to_100.toFixed(2);
                         statElements['0_100'].bar.style.width = Math.min((data.milestones.zero_to_100 / 30) * 100, 100) + '%';
                     }
+                    if (data.milestones.best_zero_to_100) {
+                        statElements['0_100'].best.textContent = data.milestones.best_zero_to_100.toFixed(2);
+                    }
+                    
                     if (data.milestones.zero_to_200) {
                         statElements['0_200'].last.textContent = data.milestones.zero_to_200.toFixed(2);
                         statElements['0_200'].bar.style.width = Math.min((data.milestones.zero_to_200 / 60) * 100, 100) + '%';
                     }
+                    if (data.milestones.best_zero_to_200) {
+                        statElements['0_200'].best.textContent = data.milestones.best_zero_to_200.toFixed(2);
+                    }
+                    
                     if (data.milestones.hundred_to_zero) {
                         statElements['100_0'].last.textContent = data.milestones.hundred_to_zero.toFixed(2);
                         statElements['100_0'].bar.style.width = Math.min((data.milestones.hundred_to_zero / 10) * 100, 100) + '%';
                     }
+                    if (data.milestones.best_hundred_to_zero) {
+                        statElements['100_0'].best.textContent = data.milestones.best_hundred_to_zero.toFixed(2);
+                    }
+                    
                     if (data.milestones.two_hundred_to_zero) {
                         statElements['200_0'].last.textContent = data.milestones.two_hundred_to_zero.toFixed(2);
                         statElements['200_0'].bar.style.width = Math.min((data.milestones.two_hundred_to_zero / 20) * 100, 100) + '%';
                     }
+                    if (data.milestones.best_two_hundred_to_zero) {
+                        statElements['200_0'].best.textContent = data.milestones.best_two_hundred_to_zero.toFixed(2);
+                    }
+                    
                     if (data.milestones.lateral_gforce) {
                         statElements['gforce'].last.textContent = Math.abs(data.milestones.lateral_gforce).toFixed(2);
                         statElements['gforce'].bar.style.width = Math.min((Math.abs(data.milestones.lateral_gforce) / 3) * 100, 100) + '%';
+                    }
+                    if (data.milestones.best_lateral_gforce) {
+                        statElements['gforce'].best.textContent = Math.abs(data.milestones.best_lateral_gforce).toFixed(2);
                     }
                 }
                 break;
