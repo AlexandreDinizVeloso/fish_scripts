@@ -222,8 +222,15 @@ RegisterNUICallback('confirmRemap', function(data, cb)
         originalArchetype = normalizerData.archetype or 'esportivo'
     end
 
+    -- Check if remap already exists - preserve original archetype
+    local existing = remapData[plate]
+    local preservedOriginalArchetype = originalArchetype
+    if existing and existing.originalArchetype then
+        preservedOriginalArchetype = existing.originalArchetype
+    end
+
     local remapInfo = {
-        originalArchetype = originalArchetype,
+        originalArchetype = preservedOriginalArchetype, -- Always preserve the original
         currentArchetype = data.archetype or originalArchetype,
         currentSubArchetype = data.subArchetype,
         adjustments = data.adjustments or {},

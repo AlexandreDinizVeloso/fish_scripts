@@ -30,9 +30,6 @@
     const recordingIndicator = document.getElementById('recordingIndicator');
     const speedSection = document.querySelector('.speedometer-section');
     const btnClose = document.getElementById('btnClose');
-    const btnToggleRecording = document.getElementById('btnToggleRecording');
-    const btnClear = document.getElementById('btnClear');
-    const btnCopy = document.getElementById('btnCopy');
     const versionSection = document.getElementById('versionSection');
     const versionTableBody = document.getElementById('versionTableBody');
     const nearbyRatings = document.getElementById('nearbyRatings');
@@ -118,15 +115,9 @@
         if (recording) {
             recordingIndicator.classList.add('active');
             speedSection.classList.add('recording');
-            btnToggleRecording.classList.add('recording');
-            btnToggleRecording.querySelector('.btn-icon').textContent = '⏹';
-            btnToggleRecording.querySelector('.btn-label').textContent = 'STOP RECORDING';
         } else {
             recordingIndicator.classList.remove('active');
             speedSection.classList.remove('recording');
-            btnToggleRecording.classList.remove('recording');
-            btnToggleRecording.querySelector('.btn-icon').textContent = '⏺';
-            btnToggleRecording.querySelector('.btn-label').textContent = 'START RECORDING';
         }
     }
 
@@ -350,7 +341,19 @@
                     state.versions = data.versions;
                     renderVersionTable(data.versions);
                 }
-                showToast('Recording complete');
+                showToast('Recording complete - Results copied!');
+                
+                // Copy to clipboard if provided
+                if (data.clipboard) {
+                    copyToClipboard(data.clipboard);
+                }
+                
+                // Close UI after 2 seconds if requested
+                if (data.closeUI) {
+                    setTimeout(function() {
+                        closeTelemetry();
+                    }, 2000);
+                }
                 break;
 
             case 'versionDetected':
@@ -445,36 +448,6 @@
 
     // Event Listeners
     btnClose.addEventListener('click', closeTelemetry);
-
-    btnToggleRecording.addEventListener('click', function() {
-        var endpoint = state.isRecording ? 'stopRecording' : 'startRecording';
-        fetch('https://fish_telemetry/' + endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-    });
-
-    btnClear.addEventListener('click', function() {
-        fetch('https://fish_telemetry/clearData', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-    });
-
-    btnCopy.addEventListener('click', function() {
-        var result = state.last || state.best;
-        if (!result) {
-            showToast('No data to copy');
-            return;
-        }
-        fetch('https://fish_telemetry/copyResults', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result: result })
-        });
-    });
 
     // Keyboard handler: Escape to close
     document.addEventListener('keydown', function(e) {

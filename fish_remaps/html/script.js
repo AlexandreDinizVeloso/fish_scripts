@@ -52,6 +52,7 @@
         buildAdjustmentSliders();
         updateDNAVisualization();
         updateComparison();
+        updateRemapPoints();
 
         app.classList.remove('hidden');
         fetch('https://fish_remaps/nuiReady', { method: 'POST' });
@@ -145,8 +146,37 @@
                 document.getElementById('adjVal_' + stat).textContent = (newVal >= 0 ? '+' : '') + newVal;
                 document.getElementById('adjVal_' + stat).style.color = newVal >= 0 ? '#00ff88' : '#ff3344';
                 recalculate();
+                updateRemapPoints();
             });
         });
+    }
+
+    function updateRemapPoints() {
+        // Calculate total points used (sum of absolute adjustments)
+        let totalUsed = 0;
+        stats.forEach(function(stat) {
+            const adj = Math.abs(adjustments[stat] || 0);
+            totalUsed += adj;
+        });
+
+        const maxPoints = 60; // 15 * 4 stats
+        const remainingPoints = maxPoints - totalUsed;
+        const percentageUsed = Math.max(0, Math.min(100, (totalUsed / maxPoints) * 100));
+
+        // Update UI
+        document.getElementById('remapPointsUsed').textContent = totalUsed;
+        document.getElementById('remapPointsTotal').textContent = maxPoints;
+        document.getElementById('remapPointsFill').style.width = (100 - percentageUsed) + '%';
+        
+        // Change color based on usage
+        const fillElement = document.getElementById('remapPointsFill');
+        if (percentageUsed > 80) {
+            fillElement.style.backgroundColor = '#ff3344'; // Red
+        } else if (percentageUsed > 50) {
+            fillElement.style.backgroundColor = '#ffaa00'; // Orange
+        } else {
+            fillElement.style.backgroundColor = '#00ff88'; // Green
+        }
     }
 
     function recalculate() {

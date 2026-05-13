@@ -12,7 +12,8 @@ shared_scripts {
 
 client_scripts {
     'client/main.lua',
-    'client/nui.lua'
+    'client/nui.lua',
+    'client/performance.lua'
 }
 
 server_scripts {

@@ -131,3 +131,45 @@ body { font-family: var(--font-body); background: transparent; color: var(--text
 .btn-confirm:hover { background: linear-gradient(135deg, rgba(170,68,255,0.25), rgba(0,212,255,0.25)); box-shadow: 0 0 15px rgba(170,68,255,0.3); transform: translateY(-1px); }
 
 @keyframes neonPulse { 0%, 100% { box-shadow: 0 0 5px rgba(170,68,255,0.3); } 50% { box-shadow: 0 0 15px rgba(170,68,255,0.6); } }
+
+/* Remap Points Section */
+.remap-points-container {
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    margin-bottom: 16px;
+}
+
+.remap-points-bar {
+    height: 20px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.remap-points-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+    border-radius: 3px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.remap-points-info {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.points-used {
+    color: var(--accent-yellow);
+    font-weight: bold;
+}
+
+.points-total {
+    color: var(--text-secondary);
+}

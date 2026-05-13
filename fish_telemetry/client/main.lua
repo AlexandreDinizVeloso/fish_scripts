@@ -33,6 +33,7 @@ local brakeStartTime = 0
 
 -- G-force tracking
 local maxLateralG = 0.0
+local previousLateralAccel = 0.0
 
 -- Helper: Get current vehicle
 function GetCurrentVehicle()
@@ -116,20 +117,25 @@ local function CollectDataPoint()
     table.insert(currentData.speeds, speed)
     table.insert(currentData.timestamps, elapsed)
 
-    -- Calculate lateral G-force
-    local velocity = GetEntityVelocity(veh)
+    -- Calculate lateral G-force using entity acceleration
+    local accel = GetEntityAcceleration(veh)
     local heading = GetEntityHeading(veh) * math.pi / 180.0
-    local forwardX = -math.sin(heading)
-    local forwardY = math.cos(heading)
     local rightX = math.cos(heading)
     local rightY = math.sin(heading)
 
-    local lateralVel = velocity.x * rightX + velocity.y * rightY
-    local dt = Config.RecordingInterval / 1000.0
-    local lateralAccel = (lateralVel - (previousAccel.lateral or 0)) / dt
-    local gForce = lateralAccel / 9.81
+    -- Get lateral acceleration component (perpendicular to vehicle forward)
+    local lateralAccel = accel.x * rightX + accel.y * rightY
+    
+    -- Smooth the acceleration to reduce noise
+    lateralAccel = (lateralAccel * 0.3) + (previousLateralAccel * 0.7)
+    local gForce = (lateralAccel / 9.81)
+    
+    -- Cap max G-force to realistic values
+    if math.abs(gForce) > 5.0 then
+        gForce = 5.0 * (gForce / math.abs(gForce))
+    end
 
-    previousAccel.lateral = lateralVel
+    previousLateralAccel = lateralAccel
 
     if math.abs(gForce) > math.abs(maxLateralG) then
         maxLateralG = gForce
@@ -155,7 +161,7 @@ local function CollectDataPoint()
             brakeStartSpeed = previousSpeed
             brakeStartTime = currentTime
         end
-        if brakingFrom100 and speed <= 0 then
+        if brakingFrom100 and speed < 5 then
             milestone_100_0 = (currentTime - brakeStartTime) / 1000.0
             brakingFrom100 = false
         end
@@ -165,7 +171,7 @@ local function CollectDataPoint()
             brakeStartSpeed = previousSpeed
             brakeStartTime = currentTime
         end
-        if brakingFrom200 and speed <= 0 then
+        if brakingFrom200 and speed < 5 then
             milestone_200_0 = (currentTime - brakeStartTime) / 1000.0
             brakingFrom200 = false
         end
@@ -326,17 +332,21 @@ function StopRecording()
     -- Send to server for persistence
     TriggerServerEvent('fish_telemetry:saveResults', result)
 
-    -- Notify NUI
+    -- Copy result to clipboard
+    local resultText = string.format("Veículo: %s | Max Speed: %.1f km/h | 0-100: %.2fs | Lateral G: %.2f", 
+        result.vehicle_name, result.max_speed, result.zero_to_100 or 0.0, result.lateral_gforce or 0.0)
+    
+    -- Notify NUI to close UI and copy to clipboard
     SendNUIMessage({
         type = 'recordingStopped',
         result = result,
         best = bestResults,
-        versions = vehicleVersions
+        versions = vehicleVersions,
+        closeUI = true,
+        clipboard = resultText
     })
-    SendNUIMessage({
-        type = 'copySuccess',
-        text = string.format("Veículo: %s | Max Speed: %.1f km/h | 0-100: %.2fs", result.vehicle_name, result.max_speed, result.zero_to_100 or 0.0)
-    })
+    
+    nuiOpen = false
     ShowNotification("~b~Telemetry recording stopped. Max speed: " .. string.format("%.1f", result.max_speed) .. " km/h")
 end
 
@@ -404,17 +414,15 @@ Citizen.CreateThread(function()
         if IsControlJustPressed(0, 47) then -- 47 = G
             local currentTime = GetGameTimer()
             
-            -- Complexidade de tempo O(1): Verificação temporal
+            -- Debounce check
             if (currentTime - lastToggleTime) > DEBOUNCE_COOLDOWN then
                 lastToggleTime = currentTime
                 
-                -- Mutação de estado via inversão booleana bitwise-like
-                isRecording = not isRecording 
-                
+                -- Toggle recording state correctly
                 if isRecording then
-                    StartRecording()
-                else
                     StopRecording()
+                else
+                    StartRecording()
                 end
             end
         end
