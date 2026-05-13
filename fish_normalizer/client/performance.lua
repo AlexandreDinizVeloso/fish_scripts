@@ -124,9 +124,17 @@ function ApplyPerformanceModifications(vehicle)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fBrakeForce", finalBraking)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMax", finalTractionMax)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMin", finalTractionMin)
-    
+
+    local baseDrag = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDragCoeff')
+    if tuneMult.top_speed > 0 then
+        -- Lower drag by 15% if it has a top speed tune
+        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", baseDrag * 0.85)
+    end
+
     -- Force update vehicle handling (may be required depending on FiveM version)
-    ModifyVehicleTopSpeed(vehicle, finalTopSpeed)
+    ModifyVehicleTopSpeed(vehicle, 1.0)
+
+    SetEntityMaxSpeed(vehicle, finalTopSpeed / 2.8)
 end
 
 -- Update vehicle performance when entering it

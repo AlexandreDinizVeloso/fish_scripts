@@ -4,30 +4,29 @@
 function ApplyDrivetrainModifiers(vehicle, drivetrainType)
     if not DoesEntityExist(vehicle) then return end
     
-    -- fDriveBiasFront is a value between 0.0 and 1.0
-    -- 0.0 = RWD (100% rear)
-    -- 1.0 = FWD (100% front)
-    -- 0.5 = AWD (50% front, 50% rear)
-    
-    local driveBias = 0.5 -- Default to AWD
+    local driveBias = 0.5 
+    local baseSteering = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock')
+    local baseForce = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveForce')
     
     if drivetrainType == "RWD" then
         driveBias = 0.0
+        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock', baseSteering * 1.05)
+        -- Shift traction bias back so the rear wheels can actually grip and push the car
+        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionBiasFront', 0.45)
+        
     elseif drivetrainType == "FWD" then
         driveBias = 1.0
+        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock', baseSteering * 0.95)
+        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionBiasFront', 0.55)
+        
     elseif drivetrainType == "AWD" then
         driveBias = 0.5
+        -- AWD splits power 50/50. To stop it feeling sluggish, artificially boost the drive force
+        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveForce', baseForce * 1.20)
+        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionBiasFront', 0.5)
     end
     
     SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fDriveBiasFront', driveBias)
-    
-    -- Modify steering lock slightly based on drivetrain (RWD gets slightly more steering angle for drifting)
-    local baseSteering = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock')
-    if drivetrainType == "RWD" then
-        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock', baseSteering * 1.05)
-    else
-        SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock', baseSteering * 0.95)
-    end
 end
 
 exports('ApplyDrivetrainModifiers', ApplyDrivetrainModifiers)
