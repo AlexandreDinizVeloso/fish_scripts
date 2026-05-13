@@ -152,30 +152,40 @@
     }
 
     function updateRemapPoints() {
-        // Calculate total points used (sum of absolute adjustments)
-        let totalUsed = 0;
+        // Zero-sum game: sum of adjustments must be <= 0
+        let totalSum = 0;
         stats.forEach(function(stat) {
-            const adj = Math.abs(adjustments[stat] || 0);
-            totalUsed += adj;
+            totalSum += (adjustments[stat] || 0);
         });
 
-        const maxPoints = 60; // 15 * 4 stats
-        const remainingPoints = maxPoints - totalUsed;
-        const percentageUsed = Math.max(0, Math.min(100, (totalUsed / maxPoints) * 100));
-
-        // Update UI
-        document.getElementById('remapPointsUsed').textContent = totalUsed;
-        document.getElementById('remapPointsTotal').textContent = maxPoints;
-        document.getElementById('remapPointsFill').style.width = (100 - percentageUsed) + '%';
+        // Balance is how many points you have available to spend
+        const balance = -totalSum;
         
-        // Change color based on usage
+        // Update UI
+        document.getElementById('remapPointsUsed').textContent = balance;
+        document.getElementById('remapPointsTotal').textContent = 0;
+        
+        // In a zero sum game, fill represents balance
+        const maxExpectedBalance = 30; // visual max
+        const percentageUsed = Math.max(0, Math.min(100, (Math.abs(balance) / maxExpectedBalance) * 100));
+        
         const fillElement = document.getElementById('remapPointsFill');
-        if (percentageUsed > 80) {
-            fillElement.style.backgroundColor = '#ff3344'; // Red
-        } else if (percentageUsed > 50) {
-            fillElement.style.backgroundColor = '#ffaa00'; // Orange
+        fillElement.style.width = percentageUsed + '%';
+        
+        // Change color based on balance
+        if (balance < 0) {
+            fillElement.style.backgroundColor = '#ff3344'; // Red - invalid
+            fillElement.style.width = '100%';
+            btnConfirm.disabled = true;
+            btnConfirm.style.opacity = '0.5';
+        } else if (balance > 0) {
+            fillElement.style.backgroundColor = '#ffaa00'; // Orange - points available
+            btnConfirm.disabled = false;
+            btnConfirm.style.opacity = '1.0';
         } else {
-            fillElement.style.backgroundColor = '#00ff88'; // Green
+            fillElement.style.backgroundColor = '#00ff88'; // Green - perfectly balanced
+            btnConfirm.disabled = false;
+            btnConfirm.style.opacity = '1.0';
         }
     }
 
@@ -210,7 +220,7 @@
     }
 
     function updateDNAVisualization() {
-        document.getElementById('originalArchLabel').textContent = (currentData && currentData.currentArchetype) || 'Esportivo';
+        document.getElementById('originalArchLabel').textContent = (currentData && currentData.originalArchetype) || 'Esportivo';
         document.getElementById('newArchLabel').textContent = selectedArchetype || 'Esportivo';
 
         const barsContainer = document.getElementById('dnaBars');
@@ -266,6 +276,8 @@
 
     btnClose.addEventListener('click', closeNui);
     btnConfirm.addEventListener('click', function() {
+        if (btnConfirm.disabled) return;
+        
         fetch('https://fish_remaps/confirmRemap', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

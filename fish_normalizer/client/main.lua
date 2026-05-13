@@ -405,3 +405,12 @@ Citizen.CreateThread(function()
         end
     end
 end)
+
+-- Export: GetArchetypeModifier
+exports('GetArchetypeModifier', function(archetypeKey, statKey)
+    local archetype = Config.Archetypes[archetypeKey]
+    if archetype and archetype.statModifiers then
+        return archetype.statModifiers[statKey] or 1.0
+    end
+    return 1.0
+end)

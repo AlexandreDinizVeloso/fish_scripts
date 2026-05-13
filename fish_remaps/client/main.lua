@@ -105,6 +105,7 @@ function OpenRemap()
         action = 'openRemap',
         vehicleName = displayName,
         plate = plate,
+        originalArchetype = existing and existing.originalArchetype or currentArchetype,
         currentArchetype = currentArchetype,
         currentSubArchetype = currentSubArchetype,
         baseStats = baseStats,
@@ -166,11 +167,11 @@ RegisterNUICallback('previewAdjustment', function(data, cb)
     -- Apply adjustments
     local final = ApplyStatAdjustments(blended, adjustments)
 
-    cb(json.encode({
+    cb({
         blended = blended,
         final = final,
         original = originalStats
-    }))
+    })
 end)
 
 RegisterNUICallback('changeArchetype', function(data, cb)
@@ -203,12 +204,12 @@ RegisterNUICallback('changeArchetype', function(data, cb)
 
     local blended = CalculateDNABlend(originalArchetype, newArchetype, originalStats, newBaseStats)
 
-    cb(json.encode({
+    cb({
         blended = blended,
         original = originalStats,
         originalArchetype = originalArchetype,
         newArchetype = newArchetype
-    }))
+    })
 end)
 
 RegisterNUICallback('confirmRemap', function(data, cb)

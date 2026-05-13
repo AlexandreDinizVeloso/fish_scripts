@@ -124,11 +124,16 @@ local function CollectDataPoint()
     local rightY = math.sin(heading)
 
     -- Get lateral acceleration component (perpendicular to vehicle forward)
-    local lateralAccel = accel.x * rightX + accel.y * rightY
+    local accelX = type(accel) == 'vector3' and accel.x or (type(accel) == 'table' and accel.x or 0.0)
+    local accelY = type(accel) == 'vector3' and accel.y or (type(accel) == 'table' and accel.y or 0.0)
+    local lateralAccel = accelX * rightX + accelY * rightY
     
     -- Smooth the acceleration to reduce noise
     lateralAccel = (lateralAccel * 0.3) + (previousLateralAccel * 0.7)
+    if lateralAccel ~= lateralAccel then lateralAccel = 0.0 end -- Protect against NaN
+    
     local gForce = (lateralAccel / 9.81)
+    if gForce ~= gForce then gForce = 0.0 end -- Protect against NaN
     
     -- Cap max G-force to realistic values
     if math.abs(gForce) > 5.0 then
@@ -137,8 +142,15 @@ local function CollectDataPoint()
 
     previousLateralAccel = lateralAccel
 
-    if math.abs(gForce) > math.abs(maxLateralG) then
-        maxLateralG = gForce
+    -- Calculate if vehicle has traction (not sliding)
+    local localVel = GetEntitySpeedVector(veh, true)
+    local localVelX = type(localVel) == 'vector3' and localVel.x or (type(localVel) == 'table' and localVel.x or 0.0)
+    local isSliding = math.abs(localVelX) > 2.0
+
+    if not isSliding and speed > 10.0 then
+        if math.abs(gForce) > math.abs(maxLateralG) then
+            maxLateralG = gForce
+        end
     end
 
     table.insert(currentData.gforces, gForce)
@@ -154,16 +166,11 @@ local function CollectDataPoint()
     -- Braking detection: speed decreasing significantly
     local isBraking = speed < previousSpeed - 2.0 -- significant deceleration
 
-    -- Braking milestones: 100-0 and 200-0
     if isBraking then
         if not brakingFrom100 and previousSpeed >= 100 and speed < 100 then
             brakingFrom100 = true
             brakeStartSpeed = previousSpeed
             brakeStartTime = currentTime
-        end
-        if brakingFrom100 and speed < 5 then
-            milestone_100_0 = (currentTime - brakeStartTime) / 1000.0
-            brakingFrom100 = false
         end
 
         if not brakingFrom200 and previousSpeed >= 200 and speed < 200 then
@@ -171,7 +178,22 @@ local function CollectDataPoint()
             brakeStartSpeed = previousSpeed
             brakeStartTime = currentTime
         end
-        if brakingFrom200 and speed < 5 then
+    end
+
+    -- Process braking milestones even if deceleration curve smooths out
+    if brakingFrom100 then
+        if speed > previousSpeed + 2.0 then -- Cancel if accelerating
+            brakingFrom100 = false
+        elseif speed < 5 then
+            milestone_100_0 = (currentTime - brakeStartTime) / 1000.0
+            brakingFrom100 = false
+        end
+    end
+
+    if brakingFrom200 then
+        if speed > previousSpeed + 2.0 then -- Cancel if accelerating
+            brakingFrom200 = false
+        elseif speed < 5 then
             milestone_200_0 = (currentTime - brakeStartTime) / 1000.0
             brakingFrom200 = false
         end
@@ -190,11 +212,11 @@ local function CollectDataPoint()
             recording = true,
             version = currentVersion,
             milestones = {
-                zero_to_100 = milestone_0_100,
-                zero_to_200 = milestone_0_200,
-                hundred_to_zero = milestone_100_0,
-                two_hundred_to_zero = milestone_200_0,
-                lateral_gforce = maxLateralG
+                zero_to_100 = milestone_0_100 or 0,
+                zero_to_200 = milestone_0_200 or 0,
+                hundred_to_zero = milestone_100_0 or 0,
+                two_hundred_to_zero = milestone_200_0 or 0,
+                lateral_gforce = maxLateralG or 0
             }
         })
     end
@@ -261,7 +283,19 @@ function StartRecording()
     -- Start collection timer
     recordingTimer = Citizen.CreateThread(function()
         while isRecording do
-            CollectDataPoint()
+            local success, err = pcall(CollectDataPoint)
+            if not success then
+                print("^1[FISH TELEMETRY ERROR]^7 " .. tostring(err))
+                SendNUIMessage({
+                    type = 'openTelemetry',
+                    vehicleName = "CRASH DETECTED",
+                    plate = string.sub(tostring(err), 1, 40),
+                    recording = false
+                })
+                Citizen.Wait(2000)
+                StopRecording()
+                break
+            end
             Citizen.Wait(Config.RecordingInterval)
         end
     end)
@@ -289,11 +323,11 @@ function StopRecording()
         vehicle_name = currentData.vehicleName or 'Unknown',
         plate = currentData.plate or 'Unknown',
         max_speed = currentData.maxSpeed or 0,
-        zero_to_100 = milestone_0_100,
-        zero_to_200 = milestone_0_200,
-        hundred_to_zero = milestone_100_0,
-        two_hundred_to_zero = milestone_200_0,
-        lateral_gforce = maxLateralG,
+        zero_to_100 = milestone_0_100 or 0,
+        zero_to_200 = milestone_0_200 or 0,
+        hundred_to_zero = milestone_100_0 or 0,
+        two_hundred_to_zero = milestone_200_0 or 0,
+        lateral_gforce = maxLateralG or 0,
         version = currentVersion,
         timestamp = GetCloudTimeAsInt(),
         duration = (GetGameTimer() - recordingStartTime) / 1000.0
@@ -407,27 +441,10 @@ function HideNearbyVehicleRatings()
 end
 
 -- Key bindings
-Citizen.CreateThread(function()
-    while true do
-        Citizen.Wait(0) -- Poll rate de 1 frame
-        
-        if IsControlJustPressed(0, 47) then -- 47 = G
-            local currentTime = GetGameTimer()
-            
-            -- Debounce check
-            if (currentTime - lastToggleTime) > DEBOUNCE_COOLDOWN then
-                lastToggleTime = currentTime
-                
-                -- Toggle recording state correctly
-                if isRecording then
-                    StopRecording()
-                else
-                    StartRecording()
-                end
-            end
-        end
-    end
-end)
+RegisterCommand('telemetry_record', function()
+    ToggleRecording()
+end, false)
+RegisterKeyMapping('telemetry_record', 'Toggle Telemetry Recording', 'keyboard', 'G')
 
 -- Notification helper
 function ShowNotification(msg)

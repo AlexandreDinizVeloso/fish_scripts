@@ -1,0 +1,26 @@
+[
+    {
+        "playerId": 1,
+        "message": "a",
+        "timestamp": 1778685682,
+        "channel": "general",
+        "playerName": "Peixe",
+        "id": "msg_1778685682_7705"
+    },
+    {
+        "playerId": 1,
+        "message": "a",
+        "timestamp": 1778685684,
+        "channel": "underground",
+        "playerName": "Peixe",
+        "id": "msg_1778685684_6850"
+    },
+    {
+        "playerId": 1,
+        "message": "a",
+        "timestamp": 1778685686,
+        "channel": "marketplace",
+        "playerName": "Peixe",
+        "id": "msg_1778685686_2616"
+    }
+]

@@ -150,15 +150,5 @@ RegisterCommand('fish', function()
     ToggleNUI()
 end, false)
 
--- Command to toggle recording
-RegisterCommand('telemetry_record', function()
-    if isRecording then
-        StopRecording()
-    else
-        StartRecording()
-    end
-end, false)
-
 -- Key mappings
 RegisterKeyMapping('telemetry', 'Open FISH Telemetry', 'keyboard', 'F7')
-RegisterKeyMapping('telemetry_record', 'Toggle Telemetry Recording', 'keyboard', 'G')

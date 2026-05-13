@@ -170,12 +170,12 @@ RegisterNUICallback('installPart', function(data, cb)
 
     TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
 
-    cb(json.encode({
+    cb({
         success = true,
         totalBonuses = tunes and tunes.bonuses or {},
         currentHeat = tunes and tunes.heat or 0,
         instability = tunes and tunes.instability or 0
-    }))
+    })
 end)
 
 RegisterNUICallback('uninstallPart', function(data, cb)
@@ -192,11 +192,11 @@ RegisterNUICallback('uninstallPart', function(data, cb)
 
     TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
 
-    cb(json.encode({
+    cb({
         success = true,
         totalBonuses = tunes and tunes.bonuses or {},
         currentHeat = tunes and tunes.heat or 0
-    }))
+    })
 end)
 
 RegisterNUICallback('previewPart', function(data, cb)
@@ -210,10 +210,10 @@ RegisterNUICallback('previewPart', function(data, cb)
 
     local levelInfo = Config.PartLevels[level]
 
-    cb(json.encode({
+    cb({
         bonuses = bonuses,
         levelInfo = levelInfo
-    }))
+    })
 end)
 
 RegisterNetEvent('fish_tunes:receiveData')

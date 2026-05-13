@@ -5,12 +5,12 @@
 
 DataStore = {}
 
-local DATA_PATH = GetResourcePath(GetCurrentResourceName()) .. '/data/'
+local DATA_PATH = ''
 local files = {
-    listings = DATA_PATH .. 'listings.json',
-    messages = DATA_PATH .. 'messages.json',
-    heat = DATA_PATH .. 'heat.json',
-    chips = DATA_PATH .. 'chips.json'
+    listings = 'server/listings.json',
+    messages = 'server/messages.json',
+    heat = 'server/heat.json',
+    chips = 'server/chips.json'
 }
 
 -- In-memory caches
@@ -24,11 +24,11 @@ DataStore.chips = {}
 -- ============================================================
 
 local function EnsureDataDir()
-    os.time()e('mkdir -p "' .. DATA_PATH .. '"')
+    -- Removed as we are now saving in the existing 'server' folder
 end
 
 local function ReadJSON(filepath)
-    local content = LoadResourceFile(GetCurrentResourceName(), filepath:sub(#GetResourcePath(GetCurrentResourceName()) + 2))
+    local content = LoadResourceFile(GetCurrentResourceName(), filepath)
     if content and content ~= '' then
         local success, result = pcall(json.decode, content)
         if success then
@@ -40,8 +40,7 @@ end
 
 local function WriteJSON(filepath, data)
     local content = json.encode(data, { indent = true })
-    local relativePath = filepath:sub(#GetResourcePath(GetCurrentResourceName()) + 2)
-    SaveResourceFile(GetCurrentResourceName(), relativePath, content, -1)
+    SaveResourceFile(GetCurrentResourceName(), filepath, content, -1)
 end
 
 -- ============================================================

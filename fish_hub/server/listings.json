@@ -1,0 +1,28 @@
+[
+    {
+        "sellerName": "Peixe",
+        "createdAt": 1778685674,
+        "category": "parts",
+        "id": "lst_1778685674_3546",
+        "expiresAt": 1779290474,
+        "price": 213,
+        "status": "active",
+        "sellerId": 1,
+        "type": "legal",
+        "description": "asd",
+        "name": "aaaaaaa"
+    },
+    {
+        "sellerName": "Peixe",
+        "createdAt": 1778685678,
+        "category": "parts",
+        "id": "lst_1778685678_4618",
+        "expiresAt": 1779290478,
+        "price": 123,
+        "status": "active",
+        "sellerId": 1,
+        "type": "legal",
+        "description": "123",
+        "name": "123"
+    }
+]
