@@ -17,7 +17,7 @@ end
 
 -- Load config from exports
 function LoadConfig()
-    config = require('config')
+    config = Config
     -- Initialize all modules with config
     Degradation.Init(config)
     MileageTracker.Init(config)
@@ -59,7 +59,6 @@ AddEventHandler('fish_tunes:saveTunes', function(plate, data)
     tunesDataCache[plate].owner = GetPlayerIdentifier(src, 0)
     tunesDataCache[plate].lastUpdated = os.time()
     SaveTunesDataToFile()
-    print('[fish_tunes] Vehicle ' .. plate .. ' tuned by ' .. GetPlayerName(src))
 end)
 
 RegisterNetEvent('fish_tunes:requestAdvancedData')

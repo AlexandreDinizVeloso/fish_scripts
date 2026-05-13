@@ -114,9 +114,6 @@ function GetVehicleRank(vehicle)
     local stats = GetVehiclePerformanceStats(vehicle)
     if not stats then return nil end
 
-    local baseScore = CalculateBaseScore(stats)
-
-    -- Check for stored archetype
     local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
     local storedData = vehicleData[plate]
     local archetype = 'esportivo'
@@ -129,7 +126,48 @@ function GetVehicleRank(vehicle)
         archetype = Config.VehicleClassMap[stats.class] or 'esportivo'
     end
 
-    local finalScore, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
+    -- Calculate base first to map the archetype
+    local baseScore = CalculateBaseScore(stats)
+    local _, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
+    
+    -- INJECT REMAP MULTIPLIERS
+    if GetResourceState('fish_remaps') == 'started' then
+        local remapData = exports['fish_remaps']:GetVehicleRemapData(vehicle)
+        if remapData and remapData.finalStats then
+            local rStats = remapData.finalStats
+            local rMult = {
+                top_speed = 0.8 + (rStats.top_speed or 50) / 100 * 0.4,
+                acceleration = 0.8 + (rStats.acceleration or 50) / 100 * 0.4,
+                handling = 0.8 + (rStats.handling or 50) / 100 * 0.4,
+                braking = 0.8 + (rStats.braking or 50) / 100 * 0.4
+            }
+            modifiedStats.top_speed = modifiedStats.top_speed * rMult.top_speed
+            modifiedStats.acceleration = modifiedStats.acceleration * rMult.acceleration
+            modifiedStats.handling = modifiedStats.handling * rMult.handling
+            modifiedStats.braking = modifiedStats.braking * rMult.braking
+        end
+    end
+
+    -- INJECT TUNE BONUSES
+    if GetResourceState('fish_tunes') == 'started' then
+        local tuneData = exports['fish_tunes']:GetVehicleTunes(vehicle)
+        if tuneData and tuneData.bonuses then
+            local tBonus = tuneData.bonuses
+            modifiedStats.top_speed = modifiedStats.top_speed * (1.0 + ((tBonus.top_speed or 0) * 0.5) / 100.0)
+            modifiedStats.acceleration = modifiedStats.acceleration * (1.0 + ((tBonus.acceleration or 0) * 0.5) / 100.0)
+            modifiedStats.handling = modifiedStats.handling * (1.0 + ((tBonus.handling or 0) * 0.5) / 100.0)
+            modifiedStats.braking = modifiedStats.braking * (1.0 + ((tBonus.braking or 0) * 0.5) / 100.0)
+        end
+    end
+
+    -- RECALCULATE FINAL SCORE WITH NEW STATS
+    local finalScore = 0
+    finalScore = finalScore + (modifiedStats.top_speed * Config.Weights.top_speed)
+    finalScore = finalScore + (modifiedStats.acceleration * Config.Weights.acceleration)
+    finalScore = finalScore + (modifiedStats.handling * Config.Weights.handling)
+    finalScore = finalScore + (modifiedStats.braking * Config.Weights.braking)
+    finalScore = math.floor(finalScore * 10)
+
     if subArchetype then
         finalScore = ApplySubArchetypeBonuses(finalScore, subArchetype)
     end
@@ -141,7 +179,7 @@ function GetVehicleRank(vehicle)
         score = finalScore,
         archetype = archetype,
         subArchetype = subArchetype,
-        stats = modifiedStats or stats.normalized,
+        stats = modifiedStats,
         rawStats = stats.raw
     }
 end

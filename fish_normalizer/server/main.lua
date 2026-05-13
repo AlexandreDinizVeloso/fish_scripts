@@ -48,7 +48,6 @@ AddEventHandler('fish_normalizer:saveData', function(plate, data)
 
     SaveVehicleDataToFile()
 
-    print('[fish_normalizer] Vehicle ' .. plate .. ' normalized by ' .. GetPlayerName(src))
 end)
 
 -- Server export: Get vehicle rank

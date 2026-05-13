@@ -11,7 +11,6 @@ function ApplyDrivetrainModifiers(vehicle, drivetrainType)
     if drivetrainType == "RWD" then
         driveBias = 0.0
         SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock', baseSteering * 1.05)
-        -- Shift traction bias back so the rear wheels can actually grip and push the car
         SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionBiasFront', 0.45)
         
     elseif drivetrainType == "FWD" then
@@ -21,12 +20,14 @@ function ApplyDrivetrainModifiers(vehicle, drivetrainType)
         
     elseif drivetrainType == "AWD" then
         driveBias = 0.5
-        -- AWD splits power 50/50. To stop it feeling sluggish, artificially boost the drive force
         SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveForce', baseForce * 1.20)
         SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionBiasFront', 0.5)
     end
     
     SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fDriveBiasFront', driveBias)
+    
+    -- CRITICAL: This forces the physics engine to apply the above handling lines instantly
+    ModifyVehicleTopSpeed(vehicle, 1.0)
 end
 
 exports('ApplyDrivetrainModifiers', ApplyDrivetrainModifiers)

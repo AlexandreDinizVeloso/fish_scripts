@@ -59,7 +59,7 @@ function GetVehicleTunes(vehicle)
     return {
         parts = data.parts,
         bonuses = totalBonuses,
-        heat = math.min(Config.MaxHeat, totalHeat),
+        heat = totalHeat, 
         instability = totalInstability
     }
 end
