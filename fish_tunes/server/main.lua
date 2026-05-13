@@ -29,7 +29,7 @@ AddEventHandler('fish_tunes:saveTunes', function(plate, data)
     if not plate or not data then return end
     tunesDataCache[plate] = data
     tunesDataCache[plate].owner = GetPlayerIdentifier(src, 0)
-    tunesDataCache[plate].lastUpdated = GetCloudTimeAsInt()
+    tunesDataCache[plate].lastUpdated = os.time()
     SaveTunesDataToFile()
     print('[fish_tunes] Vehicle ' .. plate .. ' tuned by ' .. GetPlayerName(src))
 end)

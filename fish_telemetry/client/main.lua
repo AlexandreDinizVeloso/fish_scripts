@@ -14,6 +14,8 @@ local currentVersion = 1
 local previousAccel = { x = 0, y = 0, z = 0 }
 local previousSpeed = 0
 local nuiOpen = false
+local lastToggleTime = 0
+local DEBOUNCE_COOLDOWN = 500
 
 -- Timing milestones for acceleration
 local milestone_0_100 = nil
@@ -397,22 +399,24 @@ end
 -- Key bindings
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(0)
-
-        -- G key: toggle recording
-        if IsControlJustPressed(0, Config.Keys.ToggleRecording) then
-            if IsPlayerDriving() then
-                ToggleRecording()
+        Citizen.Wait(0) -- Poll rate de 1 frame
+        
+        if IsControlJustPressed(0, 47) then -- 47 = G
+            local currentTime = GetGameTimer()
+            
+            -- Complexidade de tempo O(1): Verificação temporal
+            if (currentTime - lastToggleTime) > DEBOUNCE_COOLDOWN then
+                lastToggleTime = currentTime
+                
+                -- Mutação de estado via inversão booleana bitwise-like
+                isRecording = not isRecording 
+                
+                if isRecording then
+                    StartRecording()
+                else
+                    StopRecording()
+                end
             end
-        end
-
-        -- K key: show nearby ratings (while held)
-        if IsControlPressed(0, Config.Keys.ShowRatings) then
-            if not showingRatings then
-                ShowNearbyVehicleRatings()
-            end
-        elseif showingRatings then
-            HideNearbyVehicleRatings()
         end
     end
 end)

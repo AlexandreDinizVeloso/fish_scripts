@@ -32,7 +32,7 @@ AddEventHandler('fish_remaps:saveRemap', function(plate, data)
 
     remapDataCache[plate] = data
     remapDataCache[plate].owner = GetPlayerIdentifier(src, 0)
-    remapDataCache[plate].lastUpdated = GetCloudTimeAsInt()
+    remapDataCache[plate].lastUpdated = os.time()
 
     SaveRemapDataToFile()
     print('[fish_remaps] Vehicle ' .. plate .. ' remapped by ' .. GetPlayerName(src))
