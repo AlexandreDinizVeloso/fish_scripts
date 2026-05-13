@@ -1,28 +1,28 @@
 [
     {
-        "description": "asd",
-        "category": "parts",
-        "id": "lst_1778685674_3546",
-        "price": 213,
-        "name": "aaaaaaa",
+        "expiresAt": 1779290474,
         "createdAt": 1778685674,
-        "sellerId": 1,
-        "status": "active",
-        "type": "legal",
+        "price": 213,
         "sellerName": "Peixe",
-        "expiresAt": 1779290474
+        "status": "active",
+        "id": "lst_1778685674_3546",
+        "category": "parts",
+        "sellerId": 1,
+        "description": "asd",
+        "name": "aaaaaaa",
+        "type": "legal"
     },
     {
-        "description": "123",
-        "category": "parts",
-        "id": "lst_1778685678_4618",
-        "price": 123,
-        "name": "123",
+        "expiresAt": 1779290478,
         "createdAt": 1778685678,
-        "sellerId": 1,
-        "status": "active",
-        "type": "legal",
+        "price": 123,
         "sellerName": "Peixe",
-        "expiresAt": 1779290478
+        "status": "active",
+        "id": "lst_1778685678_4618",
+        "category": "parts",
+        "sellerId": 1,
+        "description": "123",
+        "name": "123",
+        "type": "legal"
     }
 ]

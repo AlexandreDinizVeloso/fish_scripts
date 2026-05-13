@@ -1,12 +1,12 @@
 {
     "1": [
         {
-            "type": "v1",
-            "installedAt": 1778685667
+            "installedAt": 1778685667,
+            "type": "v1"
         },
         {
-            "type": "v2",
-            "installedAt": 1778685668
+            "installedAt": 1778685668,
+            "type": "v2"
         }
     ]
 }
