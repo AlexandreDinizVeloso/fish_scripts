@@ -565,6 +565,7 @@
     function closeUI() {
         $app.classList.add('hidden');
         post('close');
+        window.parent.postMessage({ action: 'closeIframe' }, '*');
     }
 
     // ── Keyboard handler ───────────────────────────────────────────────

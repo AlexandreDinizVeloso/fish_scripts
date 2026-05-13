@@ -12,20 +12,37 @@ shared_scripts {
 
 client_scripts {
     'client/main.lua',
-    'client/nui.lua'
+    'client/nui.lua',
+    'client/dyno.lua',
+    'client/drivetrain.lua',
+    'client/tires.lua',
+    'client/engine_swap.lua'
 }
 
 server_scripts {
-    'server/main.lua',
-    'server/data.lua'
+    'server/data.lua',
+    'server/degradation.lua',
+    'server/mileage.lua',
+    'server/tires.lua',
+    'server/transmission.lua',
+    'server/dyno.lua',
+    'server/drivetrain.lua',
+    'server/engine_swap.lua',
+    'server/crafting.lua',
+    'server/analytics.lua',
+    'server/main.lua'
 }
 
-ui_page 'html/index.html'
+ui_page 'html/ui.html'
 
 files {
+    'html/ui.html',
     'html/index.html',
     'html/style.css',
     'html/script.js',
+    'html/dashboard.html',
+    'html/css/dashboard.css',
+    'html/js/dashboard.js',
     'html/assets/*'
 }
 
@@ -37,10 +54,24 @@ exports {
     'GetVehicleTunes',
     'GetInstalledParts',
     'GetVehicleHeat',
-    'HasIllegalParts'
+    'HasIllegalParts',
+    'GetVehicleHealthSummary',
+    'UpdateVehicleMileage',
+    'ApplyDegradation',
+    'RepairVehicle',
+    'GetHealthStatus',
+    'ApplyDynoTuning',
+    'ApplyDrivetrainModifiers',
+    'ApplyTireModifiers',
+    'ApplyEngineSwapModifiers'
 }
 
 server_exports {
     'GetVehicleTunesServer',
-    'SaveTunesData'
+    'SaveTunesData',
+    'GetVehicleHealthSummary',
+    'UpdateVehicleMileage',
+    'ApplyDegradation',
+    'RepairVehicle',
+    'GetHealthStatus'
 }

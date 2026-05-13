@@ -92,3 +92,136 @@ Config.MaxHeat = 100
 Config.HeatDecayRate = 0.5 -- per minute when not in vehicle
 Config.PoliceHeatThreshold = 40 -- heat level where police attention starts
 Config.PoliceHeatMultiplier = 0.01 -- chance per heat point per check
+
+-- ============================================================
+-- Engine Degradation System
+-- ============================================================
+
+Config.Degradation = {
+    enabled = true,
+    updateInterval = 30000, -- Check degradation every 30 seconds in-game
+}
+
+-- Degradation rates per part (health points lost per event)
+-- Rates can be modified based on part level and tuning efficiency
+Config.DegradationRates = {
+    engine = {
+        base_rate = 0.5, -- per 1000km normal driving
+        harsh_acceleration_multiplier = 2.0,
+        overspeed_multiplier = 1.5,
+        poor_tuning_multiplier = 3.0, -- if AFR is bad (outside 13.2-13.8)
+        turbo_wear_multiplier = 2.5 -- extra wear if turbo installed
+    },
+    transmission = {
+        base_rate = 0.3,
+        harsh_acceleration_multiplier = 1.8,
+        overspeed_multiplier = 1.2,
+        poor_tuning_multiplier = 2.0,
+        manual_mode_multiplier = 0.8 -- manual tuning is gentler
+    },
+    suspension = {
+        base_rate = 0.4,
+        rough_handling_multiplier = 2.0,
+        overspeed_multiplier = 1.3,
+        poor_tuning_multiplier = 1.5
+    },
+    brakes = {
+        base_rate = 0.35,
+        harsh_braking_multiplier = 2.5,
+        overspeed_multiplier = 2.0,
+        poor_tuning_multiplier = 1.5
+    },
+    tires = {
+        base_rate = 0.6, -- tires wear faster
+        rough_handling_multiplier = 2.2,
+        overspeed_multiplier = 1.8,
+        poor_tuning_multiplier = 1.3,
+        drifting_multiplier = 3.0
+    },
+    turbo = {
+        base_rate = 0.4,
+        harsh_acceleration_multiplier = 3.0,
+        overspeed_multiplier = 2.5,
+        poor_tuning_multiplier = 4.0, -- turbo sensitive to tuning
+        boost_pressure_multiplier = 1.2 -- high boost = more wear
+    }
+}
+
+-- Mileage thresholds for automatic degradation events
+Config.MileageThresholds = {
+    {distance = 1000, degradation = 1},    -- -1 health at 1000km
+    {distance = 5000, degradation = 3},    -- -3 health at 5000km
+    {distance = 10000, degradation = 5},   -- -5 health at 10000km
+    {distance = 25000, degradation = 10},  -- -10 health at 25000km
+    {distance = 50000, degradation = 15},  -- -15 health at 50000km
+}
+
+-- Health status thresholds
+Config.HealthStatus = {
+    excellent = { min = 90, label = 'Excellent ✅', color = '#66BB6A' },
+    good = { min = 75, label = 'Good 👍', color = '#4FC3F7' },
+    fair = { min = 50, label = 'Fair ⚠️', color = '#FFD54F' },
+    poor = { min = 25, label = 'Poor 🔧', color = '#FF8800' },
+    critical = { min = 0, label = 'Critical ❌', color = '#FF1744' }
+}
+
+-- Performance impact per health level (percentage multiplier)
+Config.HealthPerformanceImpact = {
+    engine = function(health)
+        if health >= 90 then return 1.0
+        elseif health >= 75 then return 0.98
+        elseif health >= 50 then return 0.94
+        elseif health >= 25 then return 0.88
+        else return 0.75 end
+    end,
+    transmission = function(health)
+        if health >= 90 then return 1.0
+        elseif health >= 75 then return 0.97
+        elseif health >= 50 then return 0.92
+        elseif health >= 25 then return 0.85
+        else return 0.70 end
+    end,
+    tires = function(health)
+        if health >= 90 then return 1.0
+        elseif health >= 75 then return 0.95
+        elseif health >= 50 then return 0.88
+        elseif health >= 25 then return 0.75
+        else return 0.55 end
+    end,
+    brakes = function(health)
+        if health >= 90 then return 1.0
+        elseif health >= 75 then return 0.98
+        elseif health >= 50 then return 0.93
+        elseif health >= 25 then return 0.82
+        else return 0.65 end
+    end,
+    suspension = function(health)
+        if health >= 90 then return 1.0
+        elseif health >= 75 then return 0.96
+        elseif health >= 50 then return 0.89
+        elseif health >= 25 then return 0.80
+        else return 0.60 end
+    end
+}
+
+-- AFR (Air-Fuel Ratio) tuning parameters
+Config.AFRTuning = {
+    optimal_range_min = 13.2,
+    optimal_range_max = 13.8,
+    optimal_peak = 13.5,
+    lean_threshold = 12.0,  -- too lean, engine damage risk
+    rich_threshold = 14.5,  -- too rich, power loss
+    lean_damage_multiplier = 3.0,  -- high degradation if too lean
+    rich_power_loss = 0.85  -- 15% power loss if too rich
+}
+
+-- Dyno tuning parameters
+Config.DynoTuning = {
+    enabled = true,
+    engine_max_temp = 110, -- celsius, can explode if exceeded
+    damage_rate_per_degree_above_max = 2.0,
+    ignition_timing_range = {min = -10, max = 10},
+    fuel_table_range = {min = 50, max = 150},
+    final_drive_range = {min = 1.5, max = 4.5},
+    boost_pressure_range = {min = 0, max = 30} -- PSI
+}

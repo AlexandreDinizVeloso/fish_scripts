@@ -316,3 +316,72 @@ Config.ScoreRanges = {
     min = 0,
     max = 1000
 }
+
+-- ============================================================
+-- Vehicle Maintenance & Degradation System
+-- ============================================================
+
+Config.MaintenanceSystem = {
+    enabled = true,
+    -- Mileage is tracked in kilometers
+    mileageUpdateInterval = 5000, -- Update every 5km
+}
+
+-- Initial health values when vehicle is first tracked
+Config.InitialHealth = {
+    engine = 100,
+    transmission = 100,
+    suspension = 100,
+    brakes = 100,
+    tires = 100,
+    turbo = 100
+}
+
+-- Parts that can degrade
+Config.VehicleParts = {
+    'engine',
+    'transmission',
+    'suspension',
+    'brakes',
+    'tires',
+    'turbo'
+}
+
+-- Tire condition tracking (4 wheels)
+Config.TireTracking = {
+    wheel_fl = { label = 'Front Left', position = 0 },
+    wheel_fr = { label = 'Front Right', position = 1 },
+    wheel_rl = { label = 'Rear Left', position = 2 },
+    wheel_rr = { label = 'Rear Right', position = 3 }
+}
+
+-- Default vehicle data structure
+Config.DefaultVehicleData = {
+    plate = '',
+    owner = '',
+    archetype = 'esportivo',
+    rank = 'C',
+    score = 0,
+    -- Maintenance fields
+    mileage = 0, -- kilometers
+    engine_health = 100,
+    transmission_health = 100,
+    suspension_health = 100,
+    brakes_health = 100,
+    tires_health = 100, -- average of 4 wheels
+    turbo_health = 100,
+    -- Tuning fields
+    tuning_efficiency = 100, -- AFR status (0-150, 100 is optimal)
+    drivetrain_type = 'FWD', -- FWD, RWD, AWD
+    transmission_mode = 'auto', -- manual, auto, eco
+    current_gear_ratio = 1.0,
+    -- Timestamps
+    created = 0,
+    lastUpdated = 0,
+    lastMaintained = 0,
+    -- Statistics
+    total_driven_distance = 0,
+    harsh_acceleration_events = 0,
+    overspeed_events = 0,
+    rough_handling_events = 0
+}

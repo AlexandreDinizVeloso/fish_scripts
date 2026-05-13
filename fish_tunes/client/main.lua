@@ -11,6 +11,15 @@ function GetCurrentVehicle()
     return nil
 end
 
+function HasMechanicJob()
+    -- Qbox framework integration
+    local playerData = exports.qbx_core:GetPlayerData()
+    if playerData and playerData.job then
+        return playerData.job.name == 'mechanic' or playerData.job.name == 'tuner'
+    end
+    return false
+end
+
 function GetInstalledParts(vehicle)
     if not DoesEntityExist(vehicle) then return {} end
     local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
@@ -142,11 +151,122 @@ RegisterCommand('tunes', function()
     OpenTunes()
 end, false)
 
+function OpenAdvancedTunes()
+    local vehicle = GetCurrentVehicle()
+    if not vehicle then
+        ShowNotification('~r~You must be in a vehicle to use the advanced tuning system.')
+        return
+    end
+    
+    if not HasMechanicJob() then
+        ShowNotification('~r~Only authorized mechanics can access advanced tuning.')
+        return
+    end
+
+    local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_tunes:requestAdvancedData', plate)
+end
+
+RegisterNetEvent('fish_tunes:openAdvancedNUI')
+AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, engines, recipes)
+    local vehicle = GetCurrentVehicle()
+    if not vehicle then return end
+    
+    currentVehicle = vehicle
+    local model = GetEntityModel(vehicle)
+    local displayName = GetDisplayNameFromVehicleModel(model)
+
+    local sendData = {
+        action = 'openAdvancedTunes',
+        vehicleName = displayName,
+        plate = plate,
+        dyno = dynoData,
+        drivetrain = dtData,
+        engines = engines,
+        recipes = recipes
+    }
+
+    SetNuiFocus(true, true)
+    SendNUIMessage(sendData)
+    isNuiOpen = true
+end)
+
+RegisterCommand('advtunes', function()
+    if isNuiOpen then return end
+    OpenAdvancedTunes()
+end, false)
+
 RegisterNUICallback('close', function(data, cb)
     SetNuiFocus(false, false)
     isNuiOpen = false
     currentVehicle = nil
     cb('ok')
+end)
+
+RegisterNUICallback('nuiReadyAdvanced', function(data, cb)
+    cb('ok')
+end)
+
+RegisterNUICallback('applyDynoTune', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    
+    if not tunesData[plate] then tunesData[plate] = {} end
+    tunesData[plate].dyno = {
+        afr = data.afr,
+        timing = data.timing,
+        boost = data.boost,
+        drive = data.drive
+    }
+    
+    TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
+    exports.fish_tunes:ApplyDynoTuning(currentVehicle, tunesData[plate].dyno)
+    
+    ShowNotification('~g~ECU Flash applied successfully.')
+    cb({success = true})
+end)
+
+RegisterNUICallback('convertDrivetrain', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    
+    if not tunesData[plate] then tunesData[plate] = {} end
+    tunesData[plate].drivetrain = data.drivetrain
+    
+    TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
+    exports.fish_tunes:ApplyDrivetrainModifiers(currentVehicle, data.drivetrain)
+    
+    ShowNotification('~g~Drivetrain converted to ' .. data.drivetrain)
+    cb({success = true})
+end)
+
+RegisterNUICallback('swapEngine', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    
+    TriggerServerEvent('fish_tunes:swapEngineServer', plate, data.engineType, data.cost)
+    cb({success = true})
+end)
+
+RegisterNUICallback('setTransmissionMode', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    
+    TriggerServerEvent('fish_tunes:setTransmissionModeServer', plate, data.mode)
+    cb({success = true})
+end)
+
+RegisterNUICallback('setGearRatio', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    
+    TriggerServerEvent('fish_tunes:setGearRatioServer', plate, data.preset)
+    cb({success = true})
+end)
+
+RegisterNUICallback('craftPart', function(data, cb)
+    TriggerServerEvent('fish_tunes:craftPartServer', data.recipeId)
+    cb({success = true})
 end)
 
 RegisterNUICallback('installPart', function(data, cb)
@@ -218,7 +338,36 @@ end)
 
 RegisterNetEvent('fish_tunes:receiveData')
 AddEventHandler('fish_tunes:receiveData', function(data)
-    if data then tunesData = data end
+    if data then 
+        tunesData = data 
+        
+        -- Reapply physics if currently in a vehicle
+        local vehicle = GetCurrentVehicle()
+        if vehicle then
+            local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
+            if tunesData[plate] then
+                if tunesData[plate].dyno then
+                    exports.fish_tunes:ApplyDynoTuning(vehicle, tunesData[plate].dyno)
+                end
+                if tunesData[plate].drivetrain then
+                    exports.fish_tunes:ApplyDrivetrainModifiers(vehicle, tunesData[plate].drivetrain)
+                end
+            end
+        end
+    end
+end)
+
+RegisterNetEvent('fish_tunes:clientNotify')
+AddEventHandler('fish_tunes:clientNotify', function(msg)
+    ShowNotification(msg)
+end)
+
+RegisterNetEvent('fish_tunes:clientEngineSwapped')
+AddEventHandler('fish_tunes:clientEngineSwapped', function(plate, engineData)
+    local vehicle = GetCurrentVehicle()
+    if vehicle and GetVehicleNumberPlateText(vehicle):gsub('%s+', '') == plate then
+        exports.fish_tunes:ApplyEngineSwapModifiers(vehicle, engineData)
+    end
 end)
 
 Citizen.CreateThread(function()

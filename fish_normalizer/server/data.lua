@@ -24,6 +24,27 @@ end
 
 -- Set vehicle data
 function DataStore.SetVehicle(data, plate, vehicleInfo)
+    -- Ensure all required maintenance fields exist
+    if vehicleInfo then
+        vehicleInfo.mileage = vehicleInfo.mileage or 0
+        vehicleInfo.engine_health = vehicleInfo.engine_health or 100
+        vehicleInfo.transmission_health = vehicleInfo.transmission_health or 100
+        vehicleInfo.suspension_health = vehicleInfo.suspension_health or 100
+        vehicleInfo.brakes_health = vehicleInfo.brakes_health or 100
+        vehicleInfo.tires_health = vehicleInfo.tires_health or 100
+        vehicleInfo.turbo_health = vehicleInfo.turbo_health or 100
+        vehicleInfo.tuning_efficiency = vehicleInfo.tuning_efficiency or 100
+        vehicleInfo.drivetrain_type = vehicleInfo.drivetrain_type or 'FWD'
+        vehicleInfo.transmission_mode = vehicleInfo.transmission_mode or 'auto'
+        vehicleInfo.current_gear_ratio = vehicleInfo.current_gear_ratio or 1.0
+        vehicleInfo.created = vehicleInfo.created or os.time()
+        vehicleInfo.lastUpdated = os.time()
+        vehicleInfo.lastMaintained = vehicleInfo.lastMaintained or os.time()
+        vehicleInfo.total_driven_distance = vehicleInfo.total_driven_distance or 0
+        vehicleInfo.harsh_acceleration_events = vehicleInfo.harsh_acceleration_events or 0
+        vehicleInfo.overspeed_events = vehicleInfo.overspeed_events or 0
+        vehicleInfo.rough_handling_events = vehicleInfo.rough_handling_events or 0
+    end
     data[plate] = vehicleInfo
     DataStore.Save(data)
     return true

@@ -380,8 +380,8 @@ Citizen.CreateThread(function()
                 if dist < 30.0 and DoesEntityExist(veh) then
                     local result = GetVehicleRank(veh)
                     if result then
-                        local screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
-                        if screenX and screenY then
+                        local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
+                        if onScreen then
                             SetTextScale(0.35, 0.35)
                             SetTextFont(4)
                             SetTextProportional(true)
