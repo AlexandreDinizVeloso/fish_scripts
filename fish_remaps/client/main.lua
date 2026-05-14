@@ -126,8 +126,7 @@ end
 -- Register command
 RegisterCommand('remap', function()
     if isNuiOpen then return end
-    -- Open the tunes dashboard with remap tab
-    TriggerEvent('fish_tunes:requestDashboardWithRemap')
+    OpenRemap()
 end, false)
 
 -- NUI Callbacks
@@ -224,7 +223,6 @@ RegisterNUICallback('confirmRemap', function(data, cb)
         originalArchetype = normalizerData.archetype or 'esportivo'
     end
 
-    -- Check if remap already exists - preserve original archetype
     local existing = remapData[plate]
     local preservedOriginalArchetype = originalArchetype
     if existing and existing.originalArchetype then
@@ -232,7 +230,7 @@ RegisterNUICallback('confirmRemap', function(data, cb)
     end
 
     local remapInfo = {
-        originalArchetype = preservedOriginalArchetype, -- Always preserve the original
+        originalArchetype = preservedOriginalArchetype,
         currentArchetype = data.archetype or originalArchetype,
         currentSubArchetype = data.subArchetype,
         adjustments = data.adjustments or {},
@@ -243,12 +241,50 @@ RegisterNUICallback('confirmRemap', function(data, cb)
     }
 
     remapData[plate] = remapInfo
-    TriggerServerEvent('fish_remaps:saveRemap', plate, remapInfo)
-    
-    -- Trigger normalizer to apply remap performance changes
-    TriggerEvent('fish_remaps:performanceUpdated', plate, remapInfo)
+    -- Use cost-based server event
+    TriggerServerEvent('fish_remaps:confirmRemapServer', plate, remapInfo)
 
-    ShowNotification('~g~Vehicle remap applied successfully!')
+    TriggerEvent('fish_remaps:performanceUpdated', plate, remapInfo)
+    cb('ok')
+end)
+
+RegisterNUICallback('saveDyno', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_remaps:saveDynoServer', plate, data)
+    cb('ok')
+end)
+
+RegisterNUICallback('saveTransmission', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_remaps:saveTransmissionServer', plate, data)
+    cb('ok')
+end)
+
+-- JS calls these names (aliases)
+RegisterNUICallback('applyDyno', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_remaps:saveDynoServer', plate, data)
+    cb('ok')
+end)
+
+RegisterNUICallback('applyTransMode', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_remaps:saveTransmissionServer', plate, { mode = data.mode })
+    cb('ok')
+end)
+
+RegisterNUICallback('applyGearRatio', function(data, cb)
+    if not currentVehicle then cb('error'); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_remaps:saveTransmissionServer', plate, { gearPreset = data.preset })
+    cb('ok')
+end)
+
+RegisterNUICallback('nuiReady', function(data, cb)
     cb('ok')
 end)
 
@@ -269,6 +305,21 @@ end)
 RegisterNetEvent('fish_remaps:useRemapChip')
 AddEventHandler('fish_remaps:useRemapChip', function()
     OpenRemap()
+end)
+
+-- Notification from server
+RegisterNetEvent('fish_remaps:notification')
+AddEventHandler('fish_remaps:notification', function(msg, type)
+    if isNuiOpen then
+        SendNUIMessage({ action = 'notification', message = msg, type = type or 'info' })
+    end
+    ShowNotification(msg)
+end)
+
+-- Remap applied confirmation
+RegisterNetEvent('fish_remaps:remapApplied')
+AddEventHandler('fish_remaps:remapApplied', function(plate, data)
+    remapData[plate] = data
 end)
 
 function ShowNotification(msg)

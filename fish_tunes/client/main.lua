@@ -1,9 +1,9 @@
--- fish_tunes: Client Main
+-- fish_tunes: Client Main (v2 - Tabbed UI)
 local isNuiOpen = false
 local currentVehicle = nil
 local tunesData = {}
 
--- Expose tunesData for other client scripts in this resource
+-- Expose tunesData for other client scripts
 function GetTunesDataForPlate(plate)
     return tunesData[plate]
 end
@@ -18,15 +18,6 @@ function GetCurrentVehicle()
         return GetVehiclePedIsIn(ped, false)
     end
     return nil
-end
-
-function HasMechanicJob()
-    -- Qbox framework integration
-    local playerData = exports.qbx_core:GetPlayerData()
-    if playerData and playerData.job then
-        return playerData.job.name == 'mechanic' or playerData.job.name == 'tuner'
-    end
-    return false
 end
 
 function GetInstalledParts(vehicle)
@@ -51,14 +42,11 @@ function GetVehicleTunes(vehicle)
             for stat, val in pairs(bonuses) do
                 if stat == 'instability' then
                     totalInstability = totalInstability + val
-                elseif stat == 'durability_loss' then
-                    -- handled separately
-                elseif totalBonuses[stat] then
+                elseif stat ~= 'durability_loss' and totalBonuses[stat] then
                     totalBonuses[stat] = totalBonuses[stat] + val
                 end
             end
         end
-
         local levelInfo = Config.PartLevels[level]
         if levelInfo and not levelInfo.legal then
             totalHeat = totalHeat + levelInfo.heat
@@ -68,7 +56,7 @@ function GetVehicleTunes(vehicle)
     return {
         parts = data.parts,
         bonuses = totalBonuses,
-        heat = totalHeat, 
+        heat = totalHeat,
         instability = totalInstability
     }
 end
@@ -87,6 +75,10 @@ function HasIllegalParts(vehicle)
     return false
 end
 
+-- ============================================================
+-- Open Tunes (single tabbed UI)
+-- ============================================================
+
 function OpenTunes()
     local vehicle = GetCurrentVehicle()
     if not vehicle then
@@ -96,8 +88,10 @@ function OpenTunes()
 
     currentVehicle = vehicle
     local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
-    
-    -- Request advanced data from server (opens the full dashboard)
+    local model = GetEntityModel(vehicle)
+    local displayName = GetDisplayNameFromVehicleModel(model)
+
+    -- Request full data from server (includes saved dyno, drivetrain, parts, health)
     TriggerServerEvent('fish_tunes:requestAdvancedData', plate)
 end
 
@@ -106,32 +100,20 @@ RegisterCommand('tunes', function()
     OpenTunes()
 end, false)
 
-function OpenAdvancedTunes()
-    local vehicle = GetCurrentVehicle()
-    if not vehicle then
-        ShowNotification('~r~You must be in a vehicle to use the advanced tuning system.')
-        return
-    end
-    
-    if not HasMechanicJob() then
-        ShowNotification('~r~Only authorized mechanics can access advanced tuning.')
-        return
-    end
-
-    local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_tunes:requestAdvancedData', plate)
-end
+-- ============================================================
+-- Open NUI with full data
+-- ============================================================
 
 RegisterNetEvent('fish_tunes:openAdvancedNUI')
-AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, engines, recipes)
+AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, engines, recipes, healthData, classData)
     local vehicle = GetCurrentVehicle()
     if not vehicle then return end
-    
+
     currentVehicle = vehicle
     local model = GetEntityModel(vehicle)
     local displayName = GetDisplayNameFromVehicleModel(model)
 
-    -- Build parts data for Parts tab
+    -- Build parts data
     local currentParts = tunesData[plate] and tunesData[plate].parts or {}
     local partsDisplay = {}
     for _, cat in ipairs(Config.PartCategories) do
@@ -148,7 +130,8 @@ AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, 
                 legal = levelInfo.legal,
                 heat = levelInfo.heat,
                 bonuses = bonus,
-                selected = (levelKey == currentLevel)
+                selected = (levelKey == currentLevel),
+                cost = Config.PartCosts and Config.PartCosts[levelKey] or 0
             })
         end
         table.insert(partsDisplay, {
@@ -160,6 +143,7 @@ AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, 
             levels = levelsDisplay
         })
     end
+
     local tunes = GetVehicleTunes(vehicle)
 
     local sendData = {
@@ -168,15 +152,36 @@ AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, 
         plate = plate,
         dyno = dynoData,
         drivetrain = dtData,
-        engines = engines,
-        recipes = recipes,
-        -- Parts data for the integrated Parts tab
+        engines = engines or {},
+        recipes = recipes or {},
+        classData = classData or { currentClass = 'C', score = 0 },
+        currentClass = classData and classData.currentClass or 'C',
+        -- Parts data
         categories = partsDisplay,
         currentParts = currentParts,
         totalBonuses = tunes and tunes.bonuses or { top_speed = 0, acceleration = 0, handling = 0, braking = 0 },
         currentHeat = tunes and tunes.heat or 0,
         maxHeat = Config.MaxHeat,
-        partLevels = Config.PartLevels
+        partLevels = Config.PartLevels,
+        -- Costs
+        partCosts = Config.PartCosts or {},
+        drivetrainCost = Config.DrivetrainCost or 5000,
+        classSwapCosts = Config.ClassSwapCosts or {},
+        -- Diagnostics (transform healthData to flat structure for JS)
+        diagnostics = healthData and {
+            engine = healthData.engine and healthData.engine.health or 100,
+            transmission = healthData.transmission and healthData.transmission.health or 100,
+            suspension = healthData.suspension and healthData.suspension.health or 100,
+            brakes = healthData.brakes and healthData.brakes.health or 100,
+            tires = healthData.tires and healthData.tires.health or 100,
+            turbo = healthData.turbo and healthData.turbo.health or 100
+        } or nil,
+        tireHealth = healthData and healthData.tires and {
+            fl = healthData.tires.health or 100,
+            fr = healthData.tires.health or 100,
+            rl = healthData.tires.health or 100,
+            rr = healthData.tires.health or 100
+        } or nil
     }
 
     SetNuiFocus(true, true)
@@ -184,10 +189,9 @@ AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, 
     isNuiOpen = true
 end)
 
-RegisterCommand('advtunes', function()
-    if isNuiOpen then return end
-    OpenAdvancedTunes()
-end, false)
+-- ============================================================
+-- NUI Callbacks
+-- ============================================================
 
 RegisterNUICallback('close', function(data, cb)
     SetNuiFocus(false, false)
@@ -196,14 +200,12 @@ RegisterNUICallback('close', function(data, cb)
     cb('ok')
 end)
 
-RegisterNUICallback('nuiReadyAdvanced', function(data, cb)
-    cb('ok')
-end)
+RegisterNUICallback('nuiReady', function(data, cb) cb('ok') end)
 
 RegisterNUICallback('applyDynoTune', function(data, cb)
-    if not currentVehicle then cb('error'); return end
+    if not currentVehicle then cb({success = false}); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    
+
     if not tunesData[plate] then tunesData[plate] = {} end
     tunesData[plate].dyno = {
         afr = data.afr,
@@ -211,113 +213,35 @@ RegisterNUICallback('applyDynoTune', function(data, cb)
         boost = data.boost,
         drive = data.drive
     }
-    
+
     TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
     exports.fish_tunes:ApplyDynoTuning(currentVehicle, tunesData[plate].dyno)
-    
     ShowNotification('~g~ECU Flash applied successfully.')
     cb({success = true})
 end)
 
 RegisterNUICallback('convertDrivetrain', function(data, cb)
-    if not currentVehicle then cb('error'); return end
+    if not currentVehicle then cb({success = false}); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    
-    if not tunesData[plate] then tunesData[plate] = {} end
-    tunesData[plate].drivetrain = data.drivetrain
-    
-    TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
-    exports.fish_tunes:ApplyDrivetrainModifiers(currentVehicle, data.drivetrain)
-    
-    -- Clear drivetrain cache so new values take effect
-    exports.fish_tunes:ClearDrivetrainCache(plate)
-    
-    ShowNotification('~g~Drivetrain converted to ' .. data.drivetrain)
-    cb({success = true})
-end)
 
-RegisterNUICallback('swapEngine', function(data, cb)
-    if not currentVehicle then cb('error'); return end
-    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    
-    TriggerServerEvent('fish_tunes:swapEngineServer', plate, data.engineType, data.cost)
-    cb({success = true})
-end)
-
-RegisterNUICallback('setTransmissionMode', function(data, cb)
-    if not currentVehicle then cb('error'); return end
-    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    
-    TriggerServerEvent('fish_tunes:setTransmissionModeServer', plate, data.mode)
-    cb({success = true})
-end)
-
--- ============================================================
--- Remap integration: Open dashboard with remap tab
--- ============================================================
-RegisterNetEvent('fish_tunes:requestDashboardWithRemap')
-AddEventHandler('fish_tunes:requestDashboardWithRemap', function()
-    local vehicle = GetCurrentVehicle()
-    if not vehicle then
-        ShowNotification('~r~You must be in a vehicle.')
-        return
-    end
-    currentVehicle = vehicle
-    local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
-    -- Request advanced data; dashboard will open with remap tab
-    TriggerServerEvent('fish_tunes:requestAdvancedData', plate)
-end)
-
-RegisterNUICallback('setGearRatio', function(data, cb)
-    if not currentVehicle then cb('error'); return end
-    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    
-    TriggerServerEvent('fish_tunes:setGearRatioServer', plate, data.preset)
-    cb({success = true})
-end)
-
-RegisterNUICallback('craftPart', function(data, cb)
-    TriggerServerEvent('fish_tunes:craftPartServer', data.recipeId)
+    TriggerServerEvent('fish_tunes:convertDrivetrainServer', plate, data.drivetrain)
     cb({success = true})
 end)
 
 RegisterNUICallback('installPart', function(data, cb)
-    if not currentVehicle then cb('error'); return end
+    if not currentVehicle then cb({success = false}); return end
 
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
     local category = data.category
     local level = data.level
 
-    if not tunesData[plate] then
-        tunesData[plate] = { parts = {} }
-    end
-    if not tunesData[plate].parts then
-        tunesData[plate].parts = {}
-    end
-
-    tunesData[plate].parts[category] = level
-
-    -- Recalculate
-    local tunes = GetVehicleTunes(currentVehicle)
-
-    TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
-
-    -- Trigger performance application
-    local vehicle = currentVehicle
-    if vehicle and DoesEntityExist(vehicle) then
-        TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
-    end
-
-    cb({
-        success = true,
-        totalBonuses = tunes and tunes.bonuses or {},
-        currentHeat = tunes and tunes.heat or 0,
-        instability = tunes and tunes.instability or 0
-    })
+    -- Request server to install (handles cost check)
+    TriggerServerEvent('fish_tunes:installPartServer', plate, category, level)
+    cb({success = true})
 end)
 
 RegisterNUICallback('uninstallPart', function(data, cb)
-    if not currentVehicle then cb('error'); return end
+    if not currentVehicle then cb({success = false}); return end
 
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
     local category = data.category
@@ -327,14 +251,8 @@ RegisterNUICallback('uninstallPart', function(data, cb)
     end
 
     local tunes = GetVehicleTunes(currentVehicle)
-
     TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
-
-    -- Trigger performance application
-    local vehicle = currentVehicle
-    if vehicle and DoesEntityExist(vehicle) then
-        TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
-    end
+    TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
 
     cb({
         success = true,
@@ -344,41 +262,54 @@ RegisterNUICallback('uninstallPart', function(data, cb)
 end)
 
 RegisterNUICallback('previewPart', function(data, cb)
-    local category = data.category
-    local level = data.level
     local bonuses = {}
-
-    if Config.PartBonuses[category] and Config.PartBonuses[category][level] then
-        bonuses = Config.PartBonuses[category][level]
+    if Config.PartBonuses[data.category] and Config.PartBonuses[data.category][data.level] then
+        bonuses = Config.PartBonuses[data.category][data.level]
     end
-
-    local levelInfo = Config.PartLevels[level]
-
-    cb({
-        bonuses = bonuses,
-        levelInfo = levelInfo
-    })
+    local levelInfo = Config.PartLevels[data.level]
+    cb({ bonuses = bonuses, levelInfo = levelInfo })
 end)
+
+RegisterNUICallback('craftPart', function(data, cb)
+    TriggerServerEvent('fish_tunes:craftPartServer', data.recipeId)
+    cb({success = true})
+end)
+
+RegisterNUICallback('classSwap', function(data, cb)
+    if not currentVehicle then cb({success = false}); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_tunes:swapClassServer', plate, data.targetClass)
+    cb({success = true})
+end)
+
+RegisterNUICallback('repairVehicle', function(data, cb)
+    if not currentVehicle then cb({success = false}); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_tunes:repairVehicleServer', plate, data.partType or 'all')
+    cb({success = true})
+end)
+
+RegisterNUICallback('setTransmissionMode', function(data, cb)
+    if not currentVehicle then cb({success = false}); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_tunes:setTransmissionModeServer', plate, data.mode)
+    cb({success = true})
+end)
+
+RegisterNUICallback('setGearRatio', function(data, cb)
+    if not currentVehicle then cb({success = false}); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    TriggerServerEvent('fish_tunes:setGearRatioServer', plate, data.preset)
+    cb({success = true})
+end)
+
+-- ============================================================
+-- Server Events
+-- ============================================================
 
 RegisterNetEvent('fish_tunes:receiveData')
 AddEventHandler('fish_tunes:receiveData', function(data)
-    if data then 
-        tunesData = data 
-        
-        -- Reapply physics if currently in a vehicle
-        local vehicle = GetCurrentVehicle()
-        if vehicle then
-            local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
-            if tunesData[plate] then
-                if tunesData[plate].dyno then
-                    exports.fish_tunes:ApplyDynoTuning(vehicle, tunesData[plate].dyno)
-                end
-                if tunesData[plate].drivetrain then
-                    exports.fish_tunes:ApplyDrivetrainModifiers(vehicle, tunesData[plate].drivetrain)
-                end
-            end
-        end
-    end
+    if data then tunesData = data end
 end)
 
 RegisterNetEvent('fish_tunes:clientNotify')
@@ -386,22 +317,57 @@ AddEventHandler('fish_tunes:clientNotify', function(msg)
     ShowNotification(msg)
 end)
 
-RegisterNetEvent('fish_tunes:clientEngineSwapped')
-AddEventHandler('fish_tunes:clientEngineSwapped', function(plate, engineData)
-    local vehicle = GetCurrentVehicle()
-    if vehicle and GetVehicleNumberPlateText(vehicle):gsub('%s+', '') == plate then
-        exports.fish_tunes:ApplyEngineSwapModifiers(vehicle, engineData)
+RegisterNetEvent('fish_tunes:partInstalled')
+AddEventHandler('fish_tunes:partInstalled', function(plate, category, level, totalBonuses, heat)
+    if tunesData[plate] then
+        if not tunesData[plate].parts then tunesData[plate].parts = {} end
+        tunesData[plate].parts[category] = level
+    end
+    -- Update NUI if open
+    if isNuiOpen then
+        SendNUIMessage({
+            action = 'partInstalled',
+            category = category,
+            level = level,
+            totalBonuses = totalBonuses,
+            currentHeat = heat
+        })
     end
 end)
+
+RegisterNetEvent('fish_tunes:classSwapped')
+AddEventHandler('fish_tunes:classSwapped', function(plate, newClass, score)
+    if isNuiOpen then
+        SendNUIMessage({
+            action = 'classSwapped',
+            newClass = newClass,
+            score = score
+        })
+    end
+end)
+
+RegisterNetEvent('fish_tunes:healthData')
+AddEventHandler('fish_tunes:healthData', function(healthData)
+    if isNuiOpen then
+        SendNUIMessage({
+            action = 'updateHealth',
+            health = healthData
+        })
+    end
+end)
+
+-- ============================================================
+-- Initialization
+-- ============================================================
 
 Citizen.CreateThread(function()
     TriggerServerEvent('fish_tunes:requestData')
 end)
 
--- HEAT decay thread
+-- HEAT decay
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(60000) -- every minute
+        Citizen.Wait(60000)
         for plate, data in pairs(tunesData) do
             if data.parts then
                 local heat = 0
@@ -411,7 +377,6 @@ Citizen.CreateThread(function()
                         heat = heat + levelInfo.heat
                     end
                 end
-                -- Heat doesn't decay from parts, only from gameplay events
             end
         end
     end

@@ -5,35 +5,32 @@
 
 DataStore = {}
 
-local DATA_PATH = ''
 local files = {
-    listings = 'server/listings.json',
-    messages = 'server/messages.json',
-    heat = 'server/heat.json',
-    chips = 'server/chips.json'
+    listings  = 'server/listings.json',
+    messages  = 'server/messages.json',
+    heat      = 'server/heat.json',
+    chips     = 'server/chips.json',
+    profiles  = 'server/profiles.json',
+    channels  = 'server/channels.json'
 }
 
 -- In-memory caches
-DataStore.listings = {}
-DataStore.messages = {}
-DataStore.heat = {}
-DataStore.chips = {}
+DataStore.listings  = {}
+DataStore.messages  = {}
+DataStore.heat      = {}
+DataStore.chips     = {}
+DataStore.profiles  = {}
+DataStore.channels  = {}
 
 -- ============================================================
 -- File I/O Helpers
 -- ============================================================
 
-local function EnsureDataDir()
-    -- Removed as we are now saving in the existing 'server' folder
-end
-
 local function ReadJSON(filepath)
     local content = LoadResourceFile(GetCurrentResourceName(), filepath)
     if content and content ~= '' then
         local success, result = pcall(json.decode, content)
-        if success then
-            return result
-        end
+        if success then return result end
     end
     return nil
 end
@@ -48,40 +45,57 @@ end
 -- ============================================================
 
 function DataStore.LoadAll()
-    EnsureDataDir()
+    DataStore.listings  = ReadJSON(files.listings)  or {}
+    DataStore.messages  = ReadJSON(files.messages)   or {}
+    DataStore.heat      = ReadJSON(files.heat)       or {}
+    DataStore.chips     = ReadJSON(files.chips)      or {}
+    DataStore.profiles  = ReadJSON(files.profiles)   or {}
+    DataStore.channels  = ReadJSON(files.channels)   or {}
 
-    DataStore.listings = ReadJSON(files.listings) or {}
-    DataStore.messages = ReadJSON(files.messages) or {}
-    DataStore.heat = ReadJSON(files.heat) or {}
-    DataStore.chips = ReadJSON(files.chips) or {}
+    -- Ensure default General channel exists
+    DataStore.EnsureDefaultChannel()
 
     print('[FISH HUB Data] Loaded: ' .. #DataStore.listings .. ' listings, ' ..
           #DataStore.messages .. ' messages, ' ..
           #DataStore.heat .. ' heat entries, ' ..
-          'chips for ' .. CountTable(DataStore.chips) .. ' players')
+          'chips for ' .. CountTable(DataStore.chips) .. ' players, ' ..
+          'profiles for ' .. CountTable(DataStore.profiles) .. ' players, ' ..
+          CountTable(DataStore.channels) .. ' channels')
 end
 
-function DataStore.SaveListings()
-    WriteJSON(files.listings, DataStore.listings)
-end
-
-function DataStore.SaveMessages()
-    WriteJSON(files.messages, DataStore.messages)
-end
-
-function DataStore.SaveHeat()
-    WriteJSON(files.heat, DataStore.heat)
-end
-
-function DataStore.SaveChips()
-    WriteJSON(files.chips, DataStore.chips)
-end
+function DataStore.SaveListings()  WriteJSON(files.listings, DataStore.listings)  end
+function DataStore.SaveMessages()  WriteJSON(files.messages, DataStore.messages)  end
+function DataStore.SaveHeat()      WriteJSON(files.heat, DataStore.heat)          end
+function DataStore.SaveChips()     WriteJSON(files.chips, DataStore.chips)        end
+function DataStore.SaveProfiles()  WriteJSON(files.profiles, DataStore.profiles)  end
+function DataStore.SaveChannels()  WriteJSON(files.channels, DataStore.channels)  end
 
 function DataStore.SaveAll()
     DataStore.SaveListings()
     DataStore.SaveMessages()
     DataStore.SaveHeat()
     DataStore.SaveChips()
+    DataStore.SaveProfiles()
+    DataStore.SaveChannels()
+end
+
+-- ============================================================
+-- Profile Operations
+-- ============================================================
+
+function DataStore.GetProfile(playerId)
+    local id = tostring(playerId)
+    return DataStore.profiles[id] or { username = '', profilePic = '' }
+end
+
+function DataStore.UpdateProfile(playerId, data)
+    local id = tostring(playerId)
+    DataStore.profiles[id] = {
+        username  = data.username  or '',
+        profilePic = data.profilePic or ''
+    }
+    DataStore.SaveProfiles()
+    return true
 end
 
 -- ============================================================
@@ -95,36 +109,26 @@ end
 
 function DataStore.InstallChip(playerId, chipType)
     local id = tostring(playerId)
-    if not DataStore.chips[id] then
-        DataStore.chips[id] = {}
-    end
+    if not DataStore.chips[id] then DataStore.chips[id] = {} end
 
-    -- Check max chips
     if #DataStore.chips[id] >= Config.MaxChipsPerTablet then
         return false, 'No free chip slots'
     end
 
-    -- Check duplicate
     for _, chip in ipairs(DataStore.chips[id]) do
         if chip.type == chipType then
             return false, 'Chip already installed'
         end
     end
 
-    table.insert(DataStore.chips[id], {
-        type = chipType,
-        installedAt = os.time()
-    })
-
+    table.insert(DataStore.chips[id], { type = chipType, installedAt = os.time() })
     DataStore.SaveChips()
     return true, 'Chip installed'
 end
 
 function DataStore.RemoveChip(playerId, chipType)
     local id = tostring(playerId)
-    if not DataStore.chips[id] then
-        return false, 'No chips installed'
-    end
+    if not DataStore.chips[id] then return false, 'No chips installed' end
 
     for i, chip in ipairs(DataStore.chips[id]) do
         if chip.type == chipType then
@@ -133,7 +137,6 @@ function DataStore.RemoveChip(playerId, chipType)
             return true, 'Chip removed'
         end
     end
-
     return false, 'Chip not found'
 end
 
@@ -151,17 +154,17 @@ function DataStore.CreateListing(playerId, data)
     end
 
     local listing = {
-        id = 'lst_' .. os.time() .. '_' .. math.random(1000, 9999),
-        sellerId = playerId,
-        sellerName = data.sellerName or 'Unknown',
-        name = data.name,
+        id          = 'lst_' .. os.time() .. '_' .. math.random(1000, 9999),
+        sellerId    = playerId,
+        sellerName  = data.sellerName or 'Unknown',
+        name        = data.name,
         description = data.description or '',
-        price = tonumber(data.price) or 0,
-        type = data.listingType or 'legal', -- legal or illegal
-        category = data.category or 'parts',
-        status = 'active',
-        createdAt = os.time(),
-        expiresAt = os.time() + Config.ListingDuration
+        price       = tonumber(data.price) or 0,
+        tag         = data.tag or 'selling',  -- buying / selling
+        type        = data.listingType or 'legal', -- legal / illegal
+        status      = 'active',
+        createdAt   = os.time(),
+        expiresAt   = os.time() + Config.ListingDuration
     }
 
     table.insert(DataStore.listings, listing)
@@ -193,9 +196,109 @@ function DataStore.CleanExpiredListings()
             end
         end
     end
-    if changed then
-        DataStore.SaveListings()
+    if changed then DataStore.SaveListings() end
+end
+
+-- ============================================================
+-- Channel Operations
+-- ============================================================
+
+function DataStore.EnsureDefaultChannel()
+    if not DataStore.channels['general'] then
+        DataStore.channels['general'] = {
+            name      = 'General',
+            type      = 'general',
+            icon      = '💬',
+            members   = {},
+            createdBy = nil,
+            createdAt = os.time()
+        }
+        DataStore.SaveChannels()
     end
+end
+
+function DataStore.GetChannels()
+    return DataStore.channels
+end
+
+function DataStore.GetPlayerChannels(playerId)
+    local id = tostring(playerId)
+    local result = {}
+    for cid, ch in pairs(DataStore.channels) do
+        if ch.type == 'general' then
+            result[cid] = ch
+        else
+            for _, m in ipairs(ch.members or {}) do
+                if m == id then
+                    result[cid] = ch
+                    break
+                end
+            end
+        end
+    end
+    return result
+end
+
+function DataStore.HasChannelAccess(playerId, channelId)
+    local ch = DataStore.channels[channelId]
+    if not ch then return false end
+    if ch.type == 'general' then return true end
+    local id = tostring(playerId)
+    for _, m in ipairs(ch.members or {}) do
+        if m == id then return true end
+    end
+    return false
+end
+
+function DataStore.CreateChannel(playerId, name)
+    local id = 'ch_' .. os.time() .. '_' .. math.random(1000, 9999)
+    local pid = tostring(playerId)
+    DataStore.channels[id] = {
+        name      = name,
+        type      = 'custom',
+        icon      = '📢',
+        createdBy = pid,
+        members   = { pid },
+        createdAt = os.time()
+    }
+    DataStore.SaveChannels()
+    return id
+end
+
+function DataStore.InviteToChannel(channelId, targetId)
+    local ch = DataStore.channels[channelId]
+    if not ch then return false, 'Channel not found' end
+    if ch.type == 'general' then return false, 'Cannot invite to General' end
+
+    local tid = tostring(targetId)
+    for _, m in ipairs(ch.members or {}) do
+        if m == tid then return false, 'Already a member' end
+    end
+
+    table.insert(ch.members, tid)
+    DataStore.SaveChannels()
+    return true, 'Invited'
+end
+
+function DataStore.GetOrCreateDMChannel(playerId1, playerId2)
+    local id1 = tostring(playerId1)
+    local id2 = tostring(playerId2)
+    local minId = id1 < id2 and id1 or id2
+    local maxId = id1 < id2 and id2 or id1
+    local channelId = 'dm_' .. minId .. '_' .. maxId
+
+    if not DataStore.channels[channelId] then
+        DataStore.channels[channelId] = {
+            name      = 'DM',
+            type      = 'dm',
+            icon      = '📩',
+            createdBy = id1,
+            members   = { id1, id2 },
+            createdAt = os.time()
+        }
+        DataStore.SaveChannels()
+    end
+    return channelId
 end
 
 -- ============================================================
@@ -207,18 +310,19 @@ function DataStore.GetMessages()
 end
 
 function DataStore.AddMessage(playerId, playerName, channel, message)
+    local profile = DataStore.GetProfile(playerId)
     local msg = {
-        id = 'msg_' .. os.time() .. '_' .. math.random(1000, 9999),
-        playerId = playerId,
+        id         = 'msg_' .. os.time() .. '_' .. math.random(1000, 9999),
+        playerId   = playerId,
         playerName = playerName,
-        channel = channel,
-        message = message,
-        timestamp = os.time()
+        profilePic = profile.profilePic or '',
+        channel    = channel,
+        message    = message,
+        timestamp  = os.time()
     }
 
     table.insert(DataStore.messages, msg)
 
-    -- Trim to max
     while #DataStore.messages > Config.ChatMaxMessages do
         table.remove(DataStore.messages, 1)
     end
@@ -239,13 +343,15 @@ function DataStore.UpdateHeat(playerId, vehicleData)
     local id = tostring(playerId)
     local now = os.time()
 
-    -- Find existing entry or create new
     local found = false
     for i, entry in ipairs(DataStore.heat) do
         if entry.playerId == id and entry.vehicleModel == vehicleData.model then
-            DataStore.heat[i].heatLevel = vehicleData.heatLevel
-            DataStore.heat[i].lastSeen = now
-            DataStore.heat[i].plate = vehicleData.plate
+            DataStore.heat[i].heatLevel  = vehicleData.heatLevel
+            DataStore.heat[i].lastSeen   = now
+            DataStore.heat[i].plate      = vehicleData.plate
+            if vehicleData.name then
+                DataStore.heat[i].vehicleName = vehicleData.name
+            end
             found = true
             break
         end
@@ -253,59 +359,58 @@ function DataStore.UpdateHeat(playerId, vehicleData)
 
     if not found then
         table.insert(DataStore.heat, {
-            playerId = id,
-            playerName = vehicleData.playerName or 'Unknown',
+            playerId    = id,
+            playerName  = vehicleData.playerName or 'Unknown',
             vehicleModel = vehicleData.model,
-            vehicleName = vehicleData.name or vehicleData.model,
-            plate = vehicleData.plate or 'UNKNOWN',
-            heatLevel = vehicleData.heatLevel or 0,
-            lastSeen = now
+            vehicleName  = vehicleData.name or vehicleData.model,
+            plate       = vehicleData.plate or 'UNKNOWN',
+            heatLevel   = vehicleData.heatLevel or 0,
+            photoUrl    = '',
+            lastSeen    = now
         })
     end
 
     DataStore.SaveHeat()
 end
 
+function DataStore.SetVehiclePhoto(playerId, vehicleModel, photoUrl)
+    local id = tostring(playerId)
+    for i, entry in ipairs(DataStore.heat) do
+        if entry.playerId == id and entry.vehicleModel == vehicleModel then
+            DataStore.heat[i].photoUrl = photoUrl or ''
+            DataStore.SaveHeat()
+            return true
+        end
+    end
+    return false, 'Vehicle not found'
+end
+
 function DataStore.GetHeatRanking(max)
     max = max or Config.HEATRankingMax
 
-    -- Aggregate heat per player
-    local playerHeat = {}
+    -- Per-vehicle ranking sorted by heat level
+    local sorted = {}
     for _, entry in ipairs(DataStore.heat) do
-        local pid = entry.playerId
-        if not playerHeat[pid] then
-            playerHeat[pid] = {
-                playerId = pid,
-                playerName = entry.playerName,
-                totalHeat = 0,
-                vehicleCount = 0
-            }
-        end
-        playerHeat[pid].totalHeat = playerHeat[pid].totalHeat + (entry.heatLevel or 0)
-        playerHeat[pid].vehicleCount = playerHeat[pid].vehicleCount + 1
-        -- Update name if we have a newer one
-        if entry.playerName and entry.playerName ~= 'Unknown' then
-            playerHeat[pid].playerName = entry.playerName
+        if entry.heatLevel and entry.heatLevel > 0 then
+            table.insert(sorted, {
+                playerId    = entry.playerId,
+                playerName  = entry.playerName,
+                vehicleName = entry.vehicleName or entry.vehicleModel,
+                heatLevel   = entry.heatLevel,
+                photoUrl    = entry.photoUrl or ''
+            })
         end
     end
 
-    -- Convert to sorted array
-    local ranking = {}
-    for _, data in pairs(playerHeat) do
-        table.insert(ranking, data)
-    end
-
-    table.sort(ranking, function(a, b)
-        return a.totalHeat > b.totalHeat
+    table.sort(sorted, function(a, b)
+        return a.heatLevel > b.heatLevel
     end)
 
-    -- Trim
     local result = {}
-    for i = 1, math.min(max, #ranking) do
-        ranking[i].rank = i
-        table.insert(result, ranking[i])
+    for i = 1, math.min(max, #sorted) do
+        sorted[i].rank = i
+        table.insert(result, sorted[i])
     end
-
     return result
 end
 
@@ -318,5 +423,3 @@ function CountTable(t)
     for _ in pairs(t) do count = count + 1 end
     return count
 end
-
--- DataStore is available as a global for other scripts in this resource

@@ -1,25 +1,44 @@
-// Fish Tunes NUI - Complete Script
+// Fish Tunes - Unified Tabbed UI
 (function () {
     'use strict';
 
-    // ── State ──────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════
+    // STATE
+    // ══════════════════════════════════════════════════════════════════
     let state = {
+        vehicleName: '',
+        plate: '',
         categories: [],
         currentParts: {},
         totalBonuses: {},
         currentHeat: 0,
         maxHeat: 100,
         partLevels: {},
-        vehicleName: '',
-        plate: '',
         selectedCategory: null,
         selectedLevel: null,
         hoveredLevel: null,
         instability: 0,
-        durabilityLoss: 0
+        durabilityLoss: 0,
+        drivetrain: 'RWD',
+        currentClass: 'C',
+        // Maintenance
+        diagnostics: null,
+        tireHealth: { fl: 100, fr: 100, rl: 100, rr: 100 },
+        // Crafting
+        recipes: [],
+        // Cost config
+        partCosts: { l1: 1000, l2: 2500, l3: 5000, l4: 12000, l5: 25000 },
+        drivetrainCost: 5000,
+        classSwapCosts: {
+            'C_B': 10000, 'C_A': 30000,
+            'B_C': 5000, 'B_A': 20000,
+            'A_C': 5000, 'A_B': 5000
+        }
     };
 
-    // ── Stat config ────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════
+    // STAT META
+    // ══════════════════════════════════════════════════════════════════
     const STAT_META = {
         acceleration: { label: 'ACCEL', icon: '⚡', color: '#00d4ff', negative: false },
         top_speed:    { label: 'TOP SPD', icon: '🏎️', color: '#aa44ff', negative: false },
@@ -28,28 +47,51 @@
         instability:  { label: 'UNSTABLE', icon: '⚠️', color: '#ff8800', negative: true },
         durability_loss: { label: 'WEAR', icon: '💀', color: '#ff3344', negative: true }
     };
-
-    // All stats we track for comparison
     const ALL_STATS = ['acceleration', 'top_speed', 'handling', 'braking', 'instability', 'durability_loss'];
 
-    // ── DOM refs ───────────────────────────────────────────────────────
-    const $app        = document.getElementById('app');
-    const $tabs       = document.getElementById('categoryTabs');
-    const $grid       = document.getElementById('levelsGrid');
-    const $compare    = document.getElementById('compareBars');
-    const $heatBar    = document.getElementById('heatBar');
-    const $heatValue  = document.getElementById('heatValue');
-    const $vName      = document.getElementById('vehicleName');
-    const $plate      = document.getElementById('plateDisplay');
-    const $totalBars  = document.getElementById('totalBars');
-    const $partInfo   = document.getElementById('partInfoContent');
-    const $warnings   = document.getElementById('warnings');
-    const $btnInstall = document.getElementById('btnInstall');
-    const $btnUninstall = document.getElementById('btnUninstall');
-    const $btnClose   = document.getElementById('btnClose');
-    const $catTitle   = document.getElementById('categoryTitle');
+    // ══════════════════════════════════════════════════════════════════
+    // DOM REFS
+    // ══════════════════════════════════════════════════════════════════
+    const $ = id => document.getElementById(id);
+    const $app          = $('app');
+    const $heatBar      = $('heatBar');
+    const $heatValue    = $('heatValue');
+    const $vName        = $('vehicleName');
+    const $plate        = $('plateDisplay');
+    const $btnClose     = $('btnClose');
 
-    // ── Helpers ────────────────────────────────────────────────────────
+    // Parts tab refs
+    const $tabs         = $('categoryTabs');
+    const $grid         = $('levelsGrid');
+    const $compare      = $('compareBars');
+    const $totalBars    = $('totalBars');
+    const $partInfo     = $('partInfoContent');
+    const $warnings     = $('warnings');
+    const $btnInstall   = $('btnInstall');
+    const $btnUninstall = $('btnUninstall');
+    const $installCost  = $('installCost');
+    const $catTitle     = $('categoryTitle');
+
+    // Drivetrain
+    const $dtCards      = document.querySelectorAll('.dt-card');
+    const $btnConvert   = $('btnConvertDrivetrain');
+
+    // Swap
+    const $currentClass = $('currentClass');
+    const $targetClass  = $('targetClass');
+    const $swapCost     = $('swapCost');
+    const $btnApplySwap = $('btnApplySwap');
+
+    // Maintenance
+    const $diagList     = $('diagnosticsList');
+    const $btnRepairAll = $('btnRepairAll');
+
+    // Crafting
+    const $craftingGrid = $('craftingGrid');
+
+    // ══════════════════════════════════════════════════════════════════
+    // HELPERS
+    // ══════════════════════════════════════════════════════════════════
     function post(endpoint, data = {}) {
         return fetch(`https://fish_tunes/${endpoint}`, {
             method: 'POST',
@@ -58,25 +100,254 @@
         }).then(r => r.json()).catch(() => null);
     }
 
-    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-
     function formatStat(val) {
-        if (val > 0) return `+${val}`;
-        return `${val}`;
+        return val > 0 ? `+${val}` : `${val}`;
     }
 
-    // ── Render: Category Tabs ──────────────────────────────────────────
+    function flashElement(el, color) {
+        const orig = el.style.borderColor;
+        el.style.borderColor = color;
+        el.style.boxShadow = `0 0 20px ${color}44`;
+        setTimeout(() => { el.style.borderColor = orig; el.style.boxShadow = ''; }, 600);
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // TAB NAVIGATION
+    // ══════════════════════════════════════════════════════════════════
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            const tabId = `tab-${tab.dataset.tab}`;
+            const el = document.getElementById(tabId);
+            if (el) el.classList.add('active');
+
+            // Refresh tab-specific data
+            if (tab.dataset.tab === 'maintenance') renderMaintenance();
+            if (tab.dataset.tab === 'swap') renderSwap();
+            if (tab.dataset.tab === 'parts') renderPartsInit();
+            if (tab.dataset.tab === 'crafting') renderCrafting();
+        });
+    });
+
+    // ══════════════════════════════════════════════════════════════════
+    // CLOSE
+    // ══════════════════════════════════════════════════════════════════
+    function closeUI() {
+        $app.classList.add('hidden');
+        post('close');
+    }
+    $btnClose.addEventListener('click', closeUI);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeUI(); });
+
+    // ══════════════════════════════════════════════════════════════════
+    // HEAT METER
+    // ══════════════════════════════════════════════════════════════════
+    function updateHeat() {
+        const pct = state.maxHeat > 0 ? (state.currentHeat / state.maxHeat) * 100 : 0;
+        $heatBar.style.width = pct + '%';
+        $heatValue.textContent = state.currentHeat;
+        if (pct >= 60) $heatValue.style.color = 'var(--accent-red)';
+        else if (pct >= 30) $heatValue.style.color = 'var(--accent-orange)';
+        else $heatValue.style.color = 'var(--accent-yellow)';
+        if (pct >= 50) $heatBar.style.animation = 'heatPulse 1.5s ease-in-out infinite';
+        else $heatBar.style.animation = 'none';
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // MAINTENANCE TAB
+    // ══════════════════════════════════════════════════════════════════
+    const PART_ICONS = {
+        engine: '⚙️', transmission: '🔄', suspension: '🔧',
+        brakes: '🛑', tires: '🔘', turbo: '💨'
+    };
+
+    function renderMaintenance() {
+        // Diagnostics
+        const diag = state.diagnostics || {};
+        $diagList.innerHTML = '';
+        ['engine', 'transmission', 'suspension', 'brakes', 'tires', 'turbo'].forEach(part => {
+            const health = diag[part] || 100;
+            const status = getStatus(health);
+            const div = document.createElement('div');
+            div.className = 'diag-item';
+            div.innerHTML = `
+                <span class="diag-icon">${PART_ICONS[part] || '❓'}</span>
+                <div class="diag-info">
+                    <div class="diag-name">${part.toUpperCase()}</div>
+                    <div class="diag-bar-track">
+                        <div class="diag-bar-fill" style="width:${health}%;background:${status.color}"></div>
+                    </div>
+                    <div class="diag-status">
+                        <span class="diag-status-label" style="color:${status.color}">${status.label}</span>
+                        <span class="diag-status-pct">${Math.floor(health)}%</span>
+                    </div>
+                </div>
+            `;
+            $diagList.appendChild(div);
+        });
+
+        // Tires
+        renderTires();
+    }
+
+    function renderTires() {
+        const th = state.tireHealth;
+        const positions = [
+            { key: 'fl', id: 'tireFL' },
+            { key: 'fr', id: 'tireFR' },
+            { key: 'rl', id: 'tireRL' },
+            { key: 'rr', id: 'tireRR' }
+        ];
+        positions.forEach(pos => {
+            const card = $(pos.id);
+            if (!card) return;
+            const health = th[pos.key] || 100;
+            const status = getStatus(health);
+            const fill = card.querySelector('.tire-health-fill');
+            const pct = card.querySelector('.tire-pct');
+            if (fill) {
+                fill.style.height = health + '%';
+                fill.style.background = status.color;
+            }
+            if (pct) {
+                pct.textContent = Math.floor(health) + '%';
+                pct.style.color = status.color;
+            }
+        });
+    }
+
+    function getStatus(health) {
+        if (health >= 90) return { label: 'Excellent', color: '#66BB6A' };
+        if (health >= 75) return { label: 'Good', color: '#4FC3F7' };
+        if (health >= 50) return { label: 'Fair', color: '#FFD54F' };
+        if (health >= 25) return { label: 'Poor', color: '#FF8800' };
+        return { label: 'Critical', color: '#FF1744' };
+    }
+
+    $btnRepairAll.addEventListener('click', async () => {
+        $btnRepairAll.textContent = '⏳ Repairing...';
+        $btnRepairAll.style.pointerEvents = 'none';
+        const resp = await post('repairVehicle', { plate: state.plate });
+        if (resp && resp.success) {
+            // Reset diagnostics
+            state.diagnostics = { engine: 100, transmission: 100, suspension: 100, brakes: 100, tires: 100, turbo: 100 };
+            state.tireHealth = { fl: 100, fr: 100, rl: 100, rr: 100 };
+            renderMaintenance();
+        }
+        $btnRepairAll.textContent = '🔧 Repair All Parts';
+        $btnRepairAll.style.pointerEvents = 'auto';
+    });
+
+    // ══════════════════════════════════════════════════════════════════
+    // DRIVETRAIN TAB
+    // ══════════════════════════════════════════════════════════════════
+    $dtCards.forEach(card => {
+        card.addEventListener('click', () => {
+            $dtCards.forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            state.drivetrain = card.dataset.dt;
+        });
+    });
+
+    $btnConvert.addEventListener('click', async () => {
+        $btnConvert.style.pointerEvents = 'none';
+        $btnConvert.textContent = 'CONVERTING...';
+        const resp = await post('convertDrivetrain', {
+            plate: state.plate,
+            drivetrain: state.drivetrain,
+            cost: state.drivetrainCost
+        });
+        if (resp && resp.success) {
+            flashElement($btnConvert, 'var(--accent-green)');
+        }
+        $btnConvert.textContent = `Convert Drivetrain — $${state.drivetrainCost.toLocaleString()}`;
+        $btnConvert.style.pointerEvents = 'auto';
+    });
+
+    function renderDrivetrain() {
+        $dtCards.forEach(c => {
+            c.classList.toggle('active', c.dataset.dt === state.drivetrain);
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // CLASS SWAP TAB
+    // ══════════════════════════════════════════════════════════════════
+    function renderSwap() {
+        $currentClass.textContent = state.currentClass || '—';
+        updateSwapCost();
+    }
+
+    function updateSwapCost() {
+        const from = state.currentClass;
+        const to = $targetClass.value;
+        if (from === to) {
+            $swapCost.textContent = '$0';
+            $swapCost.style.color = 'var(--accent-green)';
+        } else {
+            const key = `${from}_${to}`;
+            const cost = state.classSwapCosts[key] || 0;
+            $swapCost.textContent = `$${cost.toLocaleString()}`;
+            $swapCost.style.color = 'var(--accent-orange)';
+        }
+    }
+
+    $targetClass.addEventListener('change', updateSwapCost);
+
+    $btnApplySwap.addEventListener('click', async () => {
+        const from = state.currentClass;
+        const to = $targetClass.value;
+        if (from === to) return;
+        const key = `${from}_${to}`;
+        const cost = state.classSwapCosts[key] || 0;
+
+        $btnApplySwap.style.pointerEvents = 'none';
+        $btnApplySwap.textContent = 'APPLYING...';
+
+        const resp = await post('classSwap', {
+            plate: state.plate,
+            fromClass: from,
+            toClass: to,
+            cost: cost
+        });
+
+        if (resp && resp.success) {
+            state.currentClass = to;
+            renderSwap();
+            flashElement($btnApplySwap, 'var(--accent-green)');
+        }
+        $btnApplySwap.textContent = 'Apply Class Swap';
+        $btnApplySwap.style.pointerEvents = 'auto';
+    });
+
+    // ══════════════════════════════════════════════════════════════════
+    // PARTS TAB
+    // ══════════════════════════════════════════════════════════════════
+    function renderPartsInit() {
+        renderTabs();
+        if (!state.selectedCategory && state.categories.length > 0) {
+            selectCategory(state.categories[0].key);
+        } else {
+            renderLevels();
+            renderCompare();
+            renderPartInfo();
+            renderWarnings();
+            updateActionButtons();
+        }
+        renderTotals();
+    }
+
     function renderTabs() {
         $tabs.innerHTML = '';
         state.categories.forEach(cat => {
             const div = document.createElement('div');
             div.className = 'category-tab' + (state.selectedCategory === cat.key ? ' selected' : '');
             div.dataset.key = cat.key;
-
             const currentLevel = state.currentParts[cat.key] || 'stock';
             const levelInfo = state.partLevels[currentLevel] || {};
             const levelColor = levelInfo.color || '#8B8B8B';
-
             div.innerHTML = `
                 <span class="category-tab-icon">${cat.icon}</span>
                 <div class="category-tab-info">
@@ -101,14 +372,12 @@
         updateActionButtons();
     }
 
-    // ── Render: Level Cards ────────────────────────────────────────────
     function renderLevels() {
         const cat = state.categories.find(c => c.key === state.selectedCategory);
         if (!cat) { $grid.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:40px;">Select a category</div>'; return; }
 
         $catTitle.textContent = cat.label.toUpperCase() + ' — SELECT LEVEL';
 
-        // Sort levels by level number
         const levelOrder = ['stock', 'l1', 'l2', 'l3', 'l4', 'l5'];
         const sortedLevels = [...cat.levels].sort((a, b) => levelOrder.indexOf(a.key) - levelOrder.indexOf(b.key));
 
@@ -116,28 +385,29 @@
         sortedLevels.forEach(lv => {
             const card = document.createElement('div');
             const isIllegal = !lv.legal;
-            const isCurrent = lv.key === cat.currentLevel;
+            const isCurrent = lv.key === (cat.currentLevel || 'stock');
             const isSelected = state.selectedLevel === lv.key;
 
-            card.className = 'level-card'
-                + (isIllegal ? ' illegal' : '')
-                + (isSelected ? ' selected' : '');
+            card.className = 'level-card' + (isIllegal ? ' illegal' : '') + (isSelected ? ' selected' : '');
 
-            // Highlight current installed level
             if (isCurrent && !isSelected) {
                 card.style.borderColor = lv.color || 'var(--border-active)';
                 card.style.boxShadow = `0 0 8px ${lv.color}33`;
             }
+
+            const costKey = lv.key;
+            const cost = state.partCosts[costKey] || 0;
+            const costDisplay = cost > 0 ? `<div style="font-family:var(--font-mono);font-size:9px;color:var(--accent-yellow);margin-top:2px;">$${cost.toLocaleString()}</div>` : '';
 
             card.innerHTML = `
                 <div class="level-icon">${lv.icon}</div>
                 <div class="level-name" style="color:${lv.color}">${lv.label}</div>
                 <div class="level-legal ${lv.legal ? 'yes' : 'no'}">${lv.legal ? 'LEGAL' : 'ILLEGAL'}</div>
                 ${lv.heat ? `<div class="level-heat">+${lv.heat} HEAT</div>` : ''}
+                ${costDisplay}
                 ${isCurrent ? '<div style="font-family:var(--font-mono);font-size:8px;color:var(--accent-blue);margin-top:4px;">● INSTALLED</div>' : ''}
             `;
 
-            // Click to select
             card.addEventListener('click', () => {
                 state.selectedLevel = lv.key;
                 renderLevels();
@@ -146,45 +416,17 @@
                 renderWarnings();
                 updateActionButtons();
             });
-
-            // Hover for preview
             card.addEventListener('mouseenter', () => {
                 state.hoveredLevel = lv.key;
-                if (!state.selectedLevel) {
-                    renderCompare();
-                    renderPartInfo();
-                }
+                if (!state.selectedLevel) { renderCompare(); renderPartInfo(); }
             });
             card.addEventListener('mouseleave', () => {
                 state.hoveredLevel = null;
-                if (!state.selectedLevel) {
-                    renderCompare();
-                    renderPartInfo();
-                }
+                if (!state.selectedLevel) { renderCompare(); renderPartInfo(); }
             });
 
             $grid.appendChild(card);
         });
-    }
-
-    // ── Render: Compare Bars ───────────────────────────────────────────
-    function renderCompare() {
-        const cat = state.categories.find(c => c.key === state.selectedCategory);
-        if (!cat) { $compare.innerHTML = ''; return; }
-
-        const currentLevel = cat.currentLevel || 'stock';
-        const previewKey = state.selectedLevel || state.hoveredLevel;
-
-        if (!previewKey || previewKey === currentLevel) {
-            // Show current stats only
-            const currentBonuses = getBonusesFor(state.selectedCategory, currentLevel);
-            renderCompareBars(currentBonuses, null);
-            return;
-        }
-
-        const currentBonuses = getBonusesFor(state.selectedCategory, currentLevel);
-        const previewBonuses = getBonusesFor(state.selectedCategory, previewKey);
-        renderCompareBars(currentBonuses, previewBonuses);
     }
 
     function getBonusesFor(category, level) {
@@ -194,16 +436,29 @@
         return lv ? (lv.bonuses || {}) : {};
     }
 
+    function renderCompare() {
+        const cat = state.categories.find(c => c.key === state.selectedCategory);
+        if (!cat) { $compare.innerHTML = ''; return; }
+
+        const currentLevel = cat.currentLevel || 'stock';
+        const previewKey = state.selectedLevel || state.hoveredLevel;
+
+        if (!previewKey || previewKey === currentLevel) {
+            renderCompareBars(getBonusesFor(state.selectedCategory, currentLevel), null);
+            return;
+        }
+        renderCompareBars(
+            getBonusesFor(state.selectedCategory, currentLevel),
+            getBonusesFor(state.selectedCategory, previewKey)
+        );
+    }
+
     function renderCompareBars(current, preview) {
-        // Collect all relevant stats
         const statsToShow = new Set();
         if (current) Object.keys(current).forEach(s => statsToShow.add(s));
         if (preview) Object.keys(preview).forEach(s => statsToShow.add(s));
-
-        // Always show core stats
         ['acceleration', 'top_speed', 'handling', 'braking'].forEach(s => statsToShow.add(s));
 
-        // Find max value for scaling
         let maxVal = 1;
         statsToShow.forEach(s => {
             const cv = Math.abs((current && current[s]) || 0);
@@ -213,21 +468,14 @@
         maxVal = Math.ceil(maxVal * 1.2) || 1;
 
         $compare.innerHTML = '';
-        const orderedStats = ALL_STATS.filter(s => statsToShow.has(s));
-
-        orderedStats.forEach(stat => {
+        ALL_STATS.filter(s => statsToShow.has(s)).forEach(stat => {
             const meta = STAT_META[stat];
             if (!meta) return;
-
             const currentVal = (current && current[stat]) || 0;
             const previewVal = preview ? ((preview[stat]) || 0) : null;
             const displayVal = previewVal !== null ? previewVal : currentVal;
-
             const currentPct = (Math.abs(currentVal) / maxVal) * 100;
             const previewPct = previewVal !== null ? (Math.abs(previewVal) / maxVal) * 100 : 0;
-
-            const row = document.createElement('div');
-            row.className = 'compare-row';
 
             const isNegative = meta.negative;
             const barColor = isNegative
@@ -235,17 +483,14 @@
                 : meta.color;
 
             const diffColor = previewVal !== null
-                ? (previewVal > currentVal
-                    ? (isNegative ? 'var(--accent-red)' : 'var(--accent-green)')
-                    : previewVal < currentVal
-                        ? (isNegative ? 'var(--accent-green)' : 'var(--accent-red)')
-                        : 'var(--text-muted)')
+                ? (previewVal > currentVal ? (isNegative ? 'var(--accent-red)' : 'var(--accent-green)')
+                    : previewVal < currentVal ? (isNegative ? 'var(--accent-green)' : 'var(--accent-red)')
+                    : 'var(--text-muted)')
                 : 'var(--text-primary)';
+            const diffText = previewVal !== null ? (previewVal > currentVal ? '▲' : previewVal < currentVal ? '▼' : '＝') : '';
 
-            const diffText = previewVal !== null
-                ? (previewVal > currentVal ? '▲' : previewVal < currentVal ? '▼' : '＝')
-                : '';
-
+            const row = document.createElement('div');
+            row.className = 'compare-row';
             row.innerHTML = `
                 <div class="compare-label">${meta.icon} ${meta.label}</div>
                 <div class="compare-track">
@@ -258,44 +503,11 @@
             `;
             $compare.appendChild(row);
         });
-
-        // Animate bars in
-        requestAnimationFrame(() => {
-            $compare.querySelectorAll('.compare-new').forEach(el => {
-                el.style.transition = 'width 0.4s cubic-bezier(0.22, 1, 0.36, 1)';
-            });
-        });
     }
 
-    // ── Render: Heat Meter ─────────────────────────────────────────────
-    function updateHeat() {
-        const pct = state.maxHeat > 0 ? (state.currentHeat / state.maxHeat) * 100 : 0;
-        $heatBar.style.width = pct + '%';
-        $heatValue.textContent = state.currentHeat;
-
-        // Color shifts
-        if (pct >= 60) {
-            $heatValue.style.color = 'var(--accent-red)';
-        } else if (pct >= 30) {
-            $heatValue.style.color = 'var(--accent-orange)';
-        } else {
-            $heatValue.style.color = 'var(--accent-yellow)';
-        }
-
-        // Pulse animation on high heat
-        if (pct >= 50) {
-            $heatBar.style.animation = 'heatPulse 1.5s ease-in-out infinite';
-        } else {
-            $heatBar.style.animation = 'none';
-        }
-    }
-
-    // ── Render: Total Bonuses ──────────────────────────────────────────
     function renderTotals() {
         const bonuses = state.totalBonuses || {};
         const stats = ['acceleration', 'top_speed', 'handling', 'braking'];
-
-        // Find max for scaling
         let maxVal = 1;
         stats.forEach(s => { maxVal = Math.max(maxVal, Math.abs(bonuses[s] || 0)); });
         maxVal = Math.ceil(maxVal * 1.2) || 1;
@@ -306,7 +518,6 @@
             if (!meta) return;
             const val = bonuses[stat] || 0;
             const pct = (Math.abs(val) / maxVal) * 100;
-
             const row = document.createElement('div');
             row.className = 'total-bar-row';
             row.innerHTML = `
@@ -319,7 +530,6 @@
             $totalBars.appendChild(row);
         });
 
-        // Instability / durability summary
         if (state.instability > 0 || state.durabilityLoss > 0) {
             const extra = document.createElement('div');
             extra.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color);font-family:var(--font-mono);font-size:10px;';
@@ -331,7 +541,6 @@
         }
     }
 
-    // ── Render: Part Info ──────────────────────────────────────────────
     function renderPartInfo() {
         const cat = state.categories.find(c => c.key === state.selectedCategory);
         if (!cat) { $partInfo.textContent = 'Select a category'; return; }
@@ -352,14 +561,12 @@
 
         const bonuses = levelInfo.bonuses || {};
         const isIllegal = !levelInfo.legal;
-
         let bonusesHtml = '';
         ALL_STATS.forEach(stat => {
             const val = bonuses[stat];
             if (val === undefined || val === 0) return;
             const meta = STAT_META[stat];
-            const isNeg = meta.negative;
-            const color = isNeg ? (val > 0 ? 'var(--accent-red)' : 'var(--accent-green)') : meta.color;
+            const color = meta.negative ? (val > 0 ? 'var(--accent-red)' : 'var(--accent-green)') : meta.color;
             bonusesHtml += `<span style="color:${color};margin-right:12px;">${meta.icon} ${meta.label} ${formatStat(val)}</span>`;
         });
 
@@ -376,238 +583,197 @@
         `;
     }
 
-    // ── Render: Warnings ───────────────────────────────────────────────
     function renderWarnings() {
         const cat = state.categories.find(c => c.key === state.selectedCategory);
         if (!cat) { $warnings.innerHTML = ''; return; }
-
         const levelKey = state.selectedLevel;
         if (!levelKey) { $warnings.innerHTML = ''; return; }
-
         const levelInfo = cat.levels.find(l => l.key === levelKey);
         if (!levelInfo) { $warnings.innerHTML = ''; return; }
-
         const bonuses = levelInfo.bonuses || {};
         $warnings.innerHTML = '';
 
-        // Illegal warning
-        if (!levelInfo.legal) {
-            addWarning('This part is ILLEGAL and will attract police attention', 'danger', '🚨');
-        }
-
-        // Instability warning
-        if (bonuses.instability && bonuses.instability > 0) {
-            addWarning(`+${bonuses.instability} Instability — vehicle may be harder to control`, '', '⚠️');
-        }
-
-        // Durability loss warning
-        if (bonuses.durability_loss && bonuses.durability_loss > 0) {
-            addWarning(`+${bonuses.durability_loss} Durability loss — increased part wear`, 'danger', '💀');
-        }
-
-        // Heat warning
-        if (levelInfo.heat > 0) {
-            const newHeat = calculatePreviewHeat(levelKey);
-            if (newHeat >= 60) {
-                addWarning(`Heat will reach ${newHeat}/${state.maxHeat} — HIGH police risk`, 'danger', '🔥');
-            } else if (levelInfo.heat > 0) {
-                addWarning(`Adds +${levelInfo.heat} heat to vehicle`, '', '🌡️');
-            }
-        }
+        if (!levelInfo.legal) addWarning('This part is ILLEGAL and will attract police attention', 'danger', '🚨');
+        if (bonuses.instability && bonuses.instability > 0) addWarning(`+${bonuses.instability} Instability — vehicle may be harder to control`, '', '⚠️');
+        if (bonuses.durability_loss && bonuses.durability_loss > 0) addWarning(`+${bonuses.durability_loss} Durability loss — increased part wear`, 'danger', '💀');
+        if (levelInfo.heat > 0) addWarning(`Adds +${levelInfo.heat} heat to vehicle`, '', '🌡️');
     }
 
     function addWarning(text, type, icon) {
         const div = document.createElement('div');
         div.className = 'warning' + (type ? ` ${type}` : '');
-        div.innerHTML = `
-            <span class="warning-icon">${icon}</span>
-            <span class="warning-text">${text}</span>
-        `;
+        div.innerHTML = `<span class="warning-icon">${icon}</span><span class="warning-text">${text}</span>`;
         $warnings.appendChild(div);
     }
 
-    function calculatePreviewHeat(excludeLevel) {
-        // Calculate what heat would be if we install the selected level
-        let heat = 0;
-        const cat = state.categories.find(c => c.key === state.selectedCategory);
-        if (!cat) return 0;
-
-        // Sum heat from all other categories' current parts
-        state.categories.forEach(c => {
-            if (c.key === state.selectedCategory) return;
-            const currentLv = state.currentParts[c.key] || 'stock';
-            const lvInfo = state.partLevels[currentLv];
-            if (lvInfo && !lvInfo.legal) heat += lvInfo.heat;
-        });
-
-        // Add heat from the selected level
-        if (excludeLevel && excludeLevel !== 'stock') {
-            const selectedLvInfo = state.partLevels[excludeLevel];
-            if (selectedLvInfo && !selectedLvInfo.legal) heat += selectedLvInfo.heat;
-        }
-
-        return Math.min(heat, state.maxHeat);
-    }
-
-    // ── Action Buttons ─────────────────────────────────────────────────
     function updateActionButtons() {
         const cat = state.categories.find(c => c.key === state.selectedCategory);
-        const hasSelection = cat && state.selectedLevel && state.selectedLevel !== cat.currentLevel;
+        const hasSelection = cat && state.selectedLevel && state.selectedLevel !== (cat.currentLevel || 'stock');
         const isCurrentStock = cat && (!cat.currentLevel || cat.currentLevel === 'stock');
 
         $btnInstall.style.display = hasSelection ? 'flex' : 'none';
         $btnUninstall.style.display = (cat && !isCurrentStock) ? 'flex' : 'none';
 
-        // Disable install if same as current
+        // Show cost
         if (hasSelection) {
-            $btnInstall.style.opacity = '1';
-            $btnInstall.style.pointerEvents = 'auto';
+            const cost = state.partCosts[state.selectedLevel] || 0;
+            $installCost.textContent = cost > 0 ? `Cost: $${cost.toLocaleString()}` : '';
+        } else {
+            $installCost.textContent = '';
         }
     }
 
-    // ── Install / Uninstall ────────────────────────────────────────────
-    async function installPart() {
+    // Install / Uninstall
+    $btnInstall.addEventListener('click', async () => {
         const cat = state.categories.find(c => c.key === state.selectedCategory);
         if (!cat || !state.selectedLevel) return;
 
         $btnInstall.style.pointerEvents = 'none';
         $btnInstall.innerHTML = '<span>⏳</span> INSTALLING...';
 
-        try {
-            const resp = await post('installPart', {
-                category: state.selectedCategory,
-                level: state.selectedLevel
-            });
+        const resp = await post('installPart', {
+            category: state.selectedCategory,
+            level: state.selectedLevel,
+            plate: state.plate,
+            cost: state.partCosts[state.selectedLevel] || 0
+        });
 
-            if (resp && resp.success) {
-                // Update local state
-                cat.currentLevel = state.selectedLevel;
-                state.currentParts[state.selectedCategory] = state.selectedLevel;
+        if (resp && resp.success) {
+            cat.currentLevel = state.selectedLevel;
+            state.currentParts[state.selectedCategory] = state.selectedLevel;
+            if (resp.totalBonuses) state.totalBonuses = resp.totalBonuses;
+            if (resp.currentHeat !== undefined) state.currentHeat = resp.currentHeat;
+            if (resp.instability !== undefined) state.instability = resp.instability;
 
-                if (resp.totalBonuses) state.totalBonuses = resp.totalBonuses;
-                if (resp.currentHeat !== undefined) state.currentHeat = resp.currentHeat;
-                if (resp.instability !== undefined) state.instability = resp.instability;
-
-                // Refresh everything
-                renderTabs();
-                renderLevels();
-                renderCompare();
-                renderPartInfo();
-                renderWarnings();
-                renderTotals();
-                updateHeat();
-                updateActionButtons();
-
-                // Flash effect
-                flashElement($btnInstall, 'var(--accent-green)');
-            }
-        } catch (e) {
-            console.error('Install failed:', e);
+            renderTabs();
+            renderLevels();
+            renderCompare();
+            renderPartInfo();
+            renderWarnings();
+            renderTotals();
+            updateHeat();
+            updateActionButtons();
+            flashElement($btnInstall, 'var(--accent-green)');
         }
 
         $btnInstall.innerHTML = '<span>⚡</span> INSTALL PART';
         $btnInstall.style.pointerEvents = 'auto';
-    }
+    });
 
-    async function uninstallPart() {
+    $btnUninstall.addEventListener('click', async () => {
         const cat = state.categories.find(c => c.key === state.selectedCategory);
         if (!cat) return;
 
         $btnUninstall.style.pointerEvents = 'none';
         $btnUninstall.innerHTML = '<span>⏳</span> REMOVING...';
 
-        try {
-            const resp = await post('uninstallPart', {
-                category: state.selectedCategory
-            });
+        const resp = await post('uninstallPart', { category: state.selectedCategory, plate: state.plate });
 
-            if (resp && resp.success) {
-                cat.currentLevel = 'stock';
-                state.currentParts[state.selectedCategory] = 'stock';
+        if (resp && resp.success) {
+            cat.currentLevel = 'stock';
+            state.currentParts[state.selectedCategory] = 'stock';
+            if (resp.totalBonuses) state.totalBonuses = resp.totalBonuses;
+            if (resp.currentHeat !== undefined) state.currentHeat = resp.currentHeat;
+            state.selectedLevel = null;
+            state.hoveredLevel = null;
 
-                if (resp.totalBonuses) state.totalBonuses = resp.totalBonuses;
-                if (resp.currentHeat !== undefined) state.currentHeat = resp.currentHeat;
-
-                state.selectedLevel = null;
-                state.hoveredLevel = null;
-
-                renderTabs();
-                renderLevels();
-                renderCompare();
-                renderPartInfo();
-                renderWarnings();
-                renderTotals();
-                updateHeat();
-                updateActionButtons();
-
-                flashElement($btnUninstall, 'var(--accent-blue)');
-            }
-        } catch (e) {
-            console.error('Uninstall failed:', e);
+            renderTabs();
+            renderLevels();
+            renderCompare();
+            renderPartInfo();
+            renderWarnings();
+            renderTotals();
+            updateHeat();
+            updateActionButtons();
+            flashElement($btnUninstall, 'var(--accent-blue)');
         }
 
         $btnUninstall.innerHTML = '<span>🔧</span> REMOVE TO STOCK';
         $btnUninstall.style.pointerEvents = 'auto';
-    }
-
-    // ── Flash feedback ─────────────────────────────────────────────────
-    function flashElement(el, color) {
-        const orig = el.style.borderColor;
-        el.style.borderColor = color;
-        el.style.boxShadow = `0 0 20px ${color}44`;
-        setTimeout(() => {
-            el.style.borderColor = orig;
-            el.style.boxShadow = '';
-        }, 600);
-    }
-
-    // ── Close ──────────────────────────────────────────────────────────
-    function closeUI() {
-        $app.classList.add('hidden');
-        post('close');
-        window.parent.postMessage({ action: 'closeIframe' }, '*');
-    }
-
-    // ── Keyboard handler ───────────────────────────────────────────────
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeUI();
     });
 
-    // ── Init & Event Listeners ─────────────────────────────────────────
-    $btnClose.addEventListener('click', closeUI);
-    $btnInstall.addEventListener('click', installPart);
-    $btnUninstall.addEventListener('click', uninstallPart);
+    // ══════════════════════════════════════════════════════════════════
+    // CRAFTING TAB
+    // ══════════════════════════════════════════════════════════════════
+    function renderCrafting() {
+        $craftingGrid.innerHTML = '';
+        if (!state.recipes || state.recipes.length === 0) {
+            $craftingGrid.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:40px;grid-column:1/-1;">No recipes available</div>';
+            return;
+        }
 
-    // ── Inject animation keyframes ─────────────────────────────────────
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes heatPulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-12px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        .level-card { animation: fadeIn 0.3s ease forwards; }
-        .category-tab { animation: slideIn 0.25s ease forwards; }
-        .compare-row { animation: fadeIn 0.3s ease forwards; }
-        .total-bar-row { animation: fadeIn 0.25s ease forwards; }
-        .warning { animation: fadeIn 0.25s ease forwards; }
-    `;
-    document.head.appendChild(style);
+        state.recipes.forEach(rec => {
+            const card = document.createElement('div');
+            card.className = 'craft-card';
 
-    // ── NUI Message Handler ────────────────────────────────────────────
+            // Build materials display
+            let materialsHtml = '';
+            if (rec.materials) {
+                const items = Object.entries(rec.materials).map(([mat, amt]) =>
+                    `<span style="color:var(--text-primary);">${amt}x ${mat}</span>`
+                ).join(', ');
+                materialsHtml = `
+                    <div class="craft-materials">
+                        <div class="craft-materials-title">MATERIALS NEEDED</div>
+                        ${items}
+                    </div>
+                `;
+            }
+
+            const successRate = rec.success_rate || rec.difficulty || 75;
+            const successColor = successRate >= 80 ? 'var(--accent-green)' : successRate >= 60 ? 'var(--accent-orange)' : 'var(--accent-red)';
+
+            card.innerHTML = `
+                <div class="craft-header">
+                    <span class="craft-icon">${rec.icon || '🔧'}</span>
+                    <span class="craft-title">${rec.label}</span>
+                </div>
+                <div class="craft-desc">${rec.description || ''}</div>
+                <div class="craft-stats">
+                    <div class="craft-stat">
+                        <span class="craft-stat-label">Success</span>
+                        <span class="craft-stat-value" style="color:${successColor}">${successRate}%</span>
+                    </div>
+                    <div class="craft-stat">
+                        <span class="craft-stat-label">Time</span>
+                        <span class="craft-stat-value">${rec.crafting_time || 0}s</span>
+                    </div>
+                    <div class="craft-stat">
+                        <span class="craft-stat-label">Category</span>
+                        <span class="craft-stat-value warn">${rec.category || '?'}</span>
+                    </div>
+                </div>
+                ${materialsHtml}
+                <div class="craft-footer">
+                    <span class="craft-cost">$${(rec.cost || 0).toLocaleString()}</span>
+                    <button class="btn-craft" data-id="${rec.id}">CRAFT</button>
+                </div>
+            `;
+
+            card.querySelector('.btn-craft').addEventListener('click', async (e) => {
+                const btn = e.target;
+                btn.textContent = 'CRAFTING...';
+                btn.style.pointerEvents = 'none';
+                const resp = await post('craftPart', { recipeId: rec.id, plate: state.plate });
+                if (resp && resp.success) {
+                    flashElement(card, 'var(--accent-green)');
+                }
+                btn.textContent = 'CRAFT';
+                btn.style.pointerEvents = 'auto';
+            });
+
+            $craftingGrid.appendChild(card);
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // NUI MESSAGE HANDLER
+    // ══════════════════════════════════════════════════════════════════
     window.addEventListener('message', (event) => {
         const data = event.data;
         if (!data || !data.action) return;
 
-        if (data.action === 'openTunes') {
-            // Populate state
+        if (data.action === 'openTunes' || data.action === 'openAdvancedTunes') {
             state.vehicleName = data.vehicleName || 'UNKNOWN';
             state.plate = data.plate || '';
             state.categories = data.categories || [];
@@ -616,11 +782,21 @@
             state.currentHeat = data.currentHeat || 0;
             state.maxHeat = data.maxHeat || 100;
             state.partLevels = data.partLevels || {};
+            state.drivetrain = data.drivetrain || 'RWD';
+            state.currentClass = data.currentClass || 'C';
+            state.diagnostics = data.diagnostics || null;
+            state.tireHealth = data.tireHealth || { fl: 100, fr: 100, rl: 100, rr: 100 };
+            state.recipes = data.recipes || [];
             state.selectedCategory = null;
             state.selectedLevel = null;
             state.hoveredLevel = null;
 
-            // Calculate instability & durability from current parts
+            // Cost config from server
+            if (data.partCosts) state.partCosts = data.partCosts;
+            if (data.drivetrainCost) state.drivetrainCost = data.drivetrainCost;
+            if (data.classSwapCosts) state.classSwapCosts = data.classSwapCosts;
+
+            // Calculate instability & durability
             state.instability = 0;
             state.durabilityLoss = 0;
             Object.keys(state.currentParts).forEach(catKey => {
@@ -637,23 +813,26 @@
             // Show app
             $app.classList.remove('hidden');
 
-            // Render everything
-            renderTabs();
+            // Render active tab
             updateHeat();
-            renderTotals();
+            renderDrivetrain();
+            renderSwap();
+            renderPartsInit();
+            renderMaintenance();
+            renderCrafting();
 
-            // Auto-select first category
-            if (state.categories.length > 0) {
-                selectCategory(state.categories[0].key);
-            }
-
-            renderCompare();
-            renderPartInfo();
-            renderWarnings();
-            updateActionButtons();
+            // Ensure first tab is active
+            document.querySelectorAll('.nav-tab').forEach((t, i) => {
+                if (i === 0) t.classList.add('active');
+                else t.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach((c, i) => {
+                if (i === 0) c.classList.add('active');
+                else c.classList.remove('active');
+            });
         }
     });
 
-    // ── Ready signal ───────────────────────────────────────────────────
+    // Ready signal
     post('nuiReady');
 })();

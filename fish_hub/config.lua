@@ -4,22 +4,20 @@ Config = {}
 Config.ChipTypes = {
     v1 = {
         label = 'V1 - Legal Access',
-        description = 'Grants access to the legal marketplace and community chat.',
-        color = '#00d4ff',
-        access = { 'marketplace_legal', 'chat' }
+        description = 'Grants access to marketplace contact, services, and chat.',
+        color = '#00d4ff'
     },
     v2 = {
         label = 'V2 - Illegal Access',
-        description = 'Grants access to the illegal marketplace, services, and underground channels.',
-        color = '#ff3344',
-        access = { 'marketplace_legal', 'marketplace_illegal', 'services', 'chat', 'chat_underground' }
+        description = 'Grants access to illegal listings, underground channels, and all services.',
+        color = '#ff3344'
     }
 }
 
 Config.MaxChipsPerTablet = 2
 
 -- Chat
-Config.ChatMaxMessages = 100
+Config.ChatMaxMessages = 200
 
 -- Marketplace
 Config.MarketplaceMaxListings = 50
@@ -31,40 +29,21 @@ Config.ServiceTypes = {
         label = 'Part Installation',
         description = 'Professional installation of vehicle parts by certified mechanics.',
         icon = '🔧',
-        requiresV2 = false
+        requiresV1 = false
     },
     remap_service = {
-        label = 'ECU Remap',
+        label = 'Remap Maker',
         description = 'Custom ECU tuning and performance remapping.',
         icon = '⚡',
-        requiresV2 = true
+        requiresV1 = true
     },
     part_delivery = {
         label = 'Part Delivery',
         description = 'Discreet delivery of parts to your location.',
         icon = '📦',
-        requiresV2 = true
+        requiresV1 = true
     }
 }
 
 -- HEAT system
-Config.HEATRankingMax = 50
-
--- Chat channels
-Config.ChatChannels = {
-    general = {
-        label = 'General',
-        icon = '💬',
-        requiresV2 = false
-    },
-    marketplace = {
-        label = 'Marketplace',
-        icon = '🏪',
-        requiresV2 = false
-    },
-    underground = {
-        label = 'Underground',
-        icon = '🔒',
-        requiresV2 = true
-    }
-}
+Config.HEATRankingMax = 5

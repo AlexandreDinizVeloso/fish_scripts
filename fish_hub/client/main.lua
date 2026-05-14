@@ -5,11 +5,12 @@
 local isOpen = false
 local playerChips = {}
 local cachedData = {
-    listings = {},
-    messages = {},
-    heat = {},
-    ranking = {},
-    services = {}
+    listings  = {},
+    messages  = {},
+    heat      = {},
+    ranking   = {},
+    profile   = { username = '', profilePic = '' },
+    channels  = {}
 }
 
 -- ============================================================
@@ -21,61 +22,50 @@ local function DebugPrint(msg)
 end
 
 local function SendNUI(action, data)
-    SendNUIMessage({
-        action = action,
-        data = data or {}
-    })
+    SendNUIMessage({ action = action, data = data or {} })
 end
 
 local function GetPlayerIdentifier()
     return GetPlayerServerId(PlayerId())
 end
 
+local function HasChipType(chipType)
+    for _, chip in ipairs(playerChips) do
+        if chip.type == chipType then return true end
+    end
+    return false
+end
+
+local function HasV1()
+    return HasChipType('v1') or HasChipType('v2')
+end
+
+local function HasV2()
+    return HasChipType('v2')
+end
+
 -- ============================================================
 -- Data Building
 -- ============================================================
 
-local function BuildMarketplaceData(filter)
-    local listings = cachedData.listings or {}
-    local result = { legal = {}, illegal = {} }
-
-    for _, listing in ipairs(listings) do
-        if listing.status == 'active' then
-            if listing.type == 'legal' then
-                table.insert(result.legal, listing)
-            elseif listing.type == 'illegal' then
-                table.insert(result.illegal, listing)
-            end
-        end
-    end
-
-    if filter == 'legal' then
-        return { legal = result.legal, illegal = {} }
-    elseif filter == 'illegal' then
-        return { legal = {}, illegal = result.illegal }
-    end
-
-    return result
-end
-
 local function BuildChatData()
     local messages = cachedData.messages or {}
-    local channels = {}
+    local channels = cachedData.channels or {}
+    local result = {}
 
-    for channel, channelConfig in pairs(Config.ChatChannels) do
+    for channelId, ch in pairs(channels) do
         local channelMessages = {}
         for _, msg in ipairs(messages) do
-            if msg.channel == channel then
+            if msg.channel == channelId then
                 table.insert(channelMessages, msg)
             end
         end
 
-        -- Sort by timestamp
         table.sort(channelMessages, function(a, b)
             return (a.timestamp or 0) < (b.timestamp or 0)
         end)
 
-        -- Limit messages
+        -- Trim to max
         local maxMsgs = Config.ChatMaxMessages
         if #channelMessages > maxMsgs then
             local trimmed = {}
@@ -85,15 +75,16 @@ local function BuildChatData()
             channelMessages = trimmed
         end
 
-        channels[channel] = {
-            label = channelConfig.label,
-            icon = channelConfig.icon,
-            requiresV2 = channelConfig.requiresV2,
+        result[channelId] = {
+            name    = ch.name,
+            type    = ch.type,
+            icon    = ch.icon,
+            members = ch.members or {},
             messages = channelMessages
         }
     end
 
-    return channels
+    return result
 end
 
 local function BuildHeatData()
@@ -103,79 +94,47 @@ local function BuildHeatData()
     local totalHeat = 0
 
     for _, entry in ipairs(heat) do
-        if entry.playerId == serverId then
+        if tostring(entry.playerId) == tostring(serverId) then
             table.insert(personal, entry)
             totalHeat = totalHeat + (entry.heatLevel or 0)
         end
     end
 
     return {
-        vehicles = personal,
+        vehicles  = personal,
         totalHeat = totalHeat,
-        ranking = cachedData.ranking or {}
+        ranking   = cachedData.ranking or {}
     }
 end
 
 local function BuildHubData()
-    local hasV1 = false
-    local hasV2 = false
+    local hasV1 = HasV1()
+    local hasV2 = HasV2()
 
-    for _, chip in ipairs(playerChips) do
-        if chip.type == 'v1' then hasV1 = true end
-        if chip.type == 'v2' then hasV2 = true end
-    end
-
-    local marketplaceData
-    if hasV2 then
-        marketplaceData = BuildMarketplaceData()
-    elseif hasV1 then
-        marketplaceData = BuildMarketplaceData('legal')
-    else
-        marketplaceData = { legal = {}, illegal = {} }
-    end
-
+    -- Services
     local services = {}
-    if hasV2 then
-        for key, svc in pairs(Config.ServiceTypes) do
-            table.insert(services, {
-                id = key,
-                label = svc.label,
-                description = svc.description,
-                icon = svc.icon,
-                requiresV2 = svc.requiresV2
-            })
-        end
-    else
-        for key, svc in pairs(Config.ServiceTypes) do
-            if not svc.requiresV2 then
-                table.insert(services, {
-                    id = key,
-                    label = svc.label,
-                    description = svc.description,
-                    icon = svc.icon,
-                    requiresV2 = svc.requiresV2
-                })
-            end
-        end
-    end
-
-    local chatData = BuildChatData()
-    -- Filter out underground channel if no v2
-    if not hasV2 then
-        chatData.underground = nil
+    for key, svc in pairs(Config.ServiceTypes) do
+        table.insert(services, {
+            id          = key,
+            label       = svc.label,
+            description = svc.description,
+            icon        = svc.icon,
+            requiresV1  = svc.requiresV1
+        })
     end
 
     return {
-        chips = playerChips,
-        maxChips = Config.MaxChipsPerTablet,
+        chips     = playerChips,
+        maxChips  = Config.MaxChipsPerTablet,
         chipTypes = Config.ChipTypes,
-        hasV1 = hasV1,
-        hasV2 = hasV2,
-        marketplace = marketplaceData,
-        services = services,
-        chat = chatData,
-        heat = BuildHeatData(),
-        serverId = GetPlayerIdentifier()
+        hasV1     = hasV1,
+        hasV2     = hasV2,
+        serverId  = GetPlayerIdentifier(),
+        profile   = cachedData.profile or { username = '', profilePic = '' },
+        listings  = cachedData.listings or {},
+        services  = services,
+        channels  = BuildChatData(),
+        heat      = BuildHeatData()
     }
 end
 
@@ -187,10 +146,8 @@ function OpenHub()
     if isOpen then return end
     isOpen = true
 
-    -- Request fresh data from server
     TriggerServerEvent('fish_hub:requestData')
 
-    -- Small delay to allow server response
     Citizen.SetTimeout(200, function()
         local hubData = BuildHubData()
         SendNUI('openHub', hubData)
@@ -210,18 +167,11 @@ end
 -- ============================================================
 
 RegisterCommand('hub', function()
-    if isOpen then
-        CloseHub()
-    else
-        OpenHub()
-    end
+    if isOpen then CloseHub() else OpenHub() end
 end, false)
 
--- Register key mapping
-RegisterKeyMapping('hub', 'Open FISH HUB', 'keyboard', 'F7')
-
 -- ============================================================
--- NUI Callbacks (close handled in nui.lua)
+-- NUI Callbacks
 -- ============================================================
 
 RegisterNUICallback('close', function(data, cb)
@@ -247,12 +197,16 @@ RegisterNUICallback('createListing', function(data, cb)
     cb({ success = true })
 end)
 
-RegisterNUICallback('acceptListing', function(data, cb)
-    if not data.listingId then
-        cb({ success = false, error = 'Missing listing ID' })
+RegisterNUICallback('contactSeller', function(data, cb)
+    if not data.listingId or not data.sellerId then
+        cb({ success = false, error = 'Missing data' })
         return
     end
-    TriggerServerEvent('fish_hub:acceptListing', data.listingId)
+    if not HasV1() then
+        cb({ success = false, error = 'V1 chip required' })
+        return
+    end
+    TriggerServerEvent('fish_hub:contactSeller', data.listingId, data.sellerId)
     cb({ success = true })
 end)
 
@@ -274,15 +228,12 @@ RegisterNUICallback('installChip', function(data, cb)
         cb({ success = false, error = 'No free chip slots' })
         return
     end
-
-    -- Check if chip type already installed
     for _, chip in ipairs(playerChips) do
         if chip.type == data.chipType then
             cb({ success = false, error = 'Chip type already installed' })
             return
         end
     end
-
     TriggerServerEvent('fish_hub:installChip', data.chipType)
     cb({ success = true })
 end)
@@ -296,32 +247,43 @@ RegisterNUICallback('removeChip', function(data, cb)
     cb({ success = true })
 end)
 
-RegisterNUICallback('openChat', function(data, cb)
-    local channel = data.channel or 'general'
-    local chatData = BuildChatData()
-    cb({ success = true, channel = channel, data = chatData[channel] or {} })
-end)
-
-RegisterNUICallback('getHeatRanking', function(data, cb)
-    local heatData = BuildHeatData()
-    cb({ success = true, data = heatData })
-end)
-
-RegisterNUICallback('toggleService', function(data, cb)
-    if not data.serviceId then
-        cb({ success = false, error = 'Missing service ID' })
+RegisterNUICallback('createChannel', function(data, cb)
+    if not data.name or data.name == '' then
+        cb({ success = false, error = 'Missing channel name' })
         return
     end
-    TriggerServerEvent('fish_hub:toggleService', data.serviceId)
+    TriggerServerEvent('fish_hub:createChannel', data.name)
     cb({ success = true })
 end)
 
-RegisterNUICallback('openTuning', function(data, cb)
-    -- Trigger the tunes dashboard to open from the hub
-    -- The tunes dashboard iframe will receive data via its own event system
-    TriggerEvent('fish_tunes:requestDashboardWithRemap')
+RegisterNUICallback('inviteToChannel', function(data, cb)
+    if not data.channelId or not data.targetId then
+        cb({ success = false, error = 'Missing channel or target' })
+        return
+    end
+    TriggerServerEvent('fish_hub:inviteToChannel', data.channelId, data.targetId)
     cb({ success = true })
 end)
+
+RegisterNUICallback('uploadCarPhoto', function(data, cb)
+    if not data.vehicleModel then
+        cb({ success = false, error = 'Missing vehicle model' })
+        return
+    end
+    TriggerServerEvent('fish_hub:uploadCarPhoto', data.vehicleModel, data.photoUrl or '')
+    cb({ success = true })
+end)
+
+RegisterNUICallback('updateProfile', function(data, cb)
+    if not data then
+        cb({ success = false, error = 'Missing data' })
+        return
+    end
+    TriggerServerEvent('fish_hub:updateProfile', data)
+    cb({ success = true })
+end)
+
+
 
 -- ============================================================
 -- Server Event Handlers
@@ -331,26 +293,16 @@ RegisterNetEvent('fish_hub:receiveData')
 AddEventHandler('fish_hub:receiveData', function(data)
     if not data then return end
 
-    if data.chips then
-        playerChips = data.chips
-    end
-    if data.listings then
-        cachedData.listings = data.listings
-    end
-    if data.messages then
-        cachedData.messages = data.messages
-    end
-    if data.heat then
-        cachedData.heat = data.heat
-    end
-    if data.ranking then
-        cachedData.ranking = data.ranking
-    end
+    if data.chips    then playerChips = data.chips end
+    if data.listings then cachedData.listings = data.listings end
+    if data.messages then cachedData.messages = data.messages end
+    if data.heat     then cachedData.heat = data.heat end
+    if data.ranking  then cachedData.ranking = data.ranking end
+    if data.profile  then cachedData.profile = data.profile end
+    if data.channels then cachedData.channels = data.channels end
 
-    -- If hub is open, refresh NUI
     if isOpen then
-        local hubData = BuildHubData()
-        SendNUI('updateHub', hubData)
+        SendNUI('updateHub', BuildHubData())
     end
 end)
 
@@ -358,12 +310,9 @@ RegisterNetEvent('fish_hub:newMessage')
 AddEventHandler('fish_hub:newMessage', function(message)
     if not message then return end
     table.insert(cachedData.messages, message)
-
-    -- Trim to max
     while #cachedData.messages > Config.ChatMaxMessages do
         table.remove(cachedData.messages, 1)
     end
-
     if isOpen then
         SendNUI('newMessage', message)
     end
@@ -373,15 +322,14 @@ RegisterNetEvent('fish_hub:listingUpdate')
 AddEventHandler('fish_hub:listingUpdate', function(listings)
     cachedData.listings = listings or cachedData.listings
     if isOpen then
-        local hubData = BuildHubData()
-        SendNUI('updateMarketplace', hubData.marketplace)
+        SendNUI('updateMarketplace', cachedData.listings)
     end
 end)
 
 RegisterNetEvent('fish_hub:heatUpdate')
 AddEventHandler('fish_hub:heatUpdate', function(heatData)
-    cachedData.heat = heatData.heat or cachedData.heat
-    cachedData.ranking = heatData.ranking or cachedData.ranking
+    if heatData.heat    then cachedData.heat = heatData.heat end
+    if heatData.ranking then cachedData.ranking = heatData.ranking end
     if isOpen then
         SendNUI('updateHeat', BuildHeatData())
     end
@@ -391,9 +339,35 @@ RegisterNetEvent('fish_hub:chipsUpdated')
 AddEventHandler('fish_hub:chipsUpdated', function(chips)
     playerChips = chips or {}
     if isOpen then
-        local hubData = BuildHubData()
-        SendNUI('updateHub', hubData)
+        SendNUI('updateHub', BuildHubData())
     end
+end)
+
+RegisterNetEvent('fish_hub:profileUpdated')
+AddEventHandler('fish_hub:profileUpdated', function(profile)
+    cachedData.profile = profile or cachedData.profile
+    if isOpen then
+        SendNUI('updateHub', BuildHubData())
+    end
+end)
+
+RegisterNetEvent('fish_hub:channelsUpdated')
+AddEventHandler('fish_hub:channelsUpdated', function(channels)
+    cachedData.channels = channels or cachedData.channels
+    if isOpen then
+        SendNUI('updateHub', BuildHubData())
+    end
+end)
+
+RegisterNetEvent('fish_hub:dmChannelCreated')
+AddEventHandler('fish_hub:dmChannelCreated', function(channelId)
+    -- Refresh data then open the DM channel in chat
+    TriggerServerEvent('fish_hub:requestData')
+    Citizen.SetTimeout(300, function()
+        if isOpen then
+            SendNUI('openChatChannel', { channelId = channelId })
+        end
+    end)
 end)
 
 RegisterNetEvent('fish_hub:notification')
@@ -406,7 +380,6 @@ end)
 -- ============================================================
 
 Citizen.CreateThread(function()
-    -- Request initial data on spawn
     Citizen.Wait(2000)
     TriggerServerEvent('fish_hub:requestData')
 end)

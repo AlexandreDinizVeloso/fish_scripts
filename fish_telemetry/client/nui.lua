@@ -68,11 +68,11 @@ RegisterNUICallback('copyResults', function(data, cb)
     end
 
     local text = string.format(
-        "═══ FISH TELEMETRY REPORT ═══\n" ..
+        "=== FISH TELEMETRY REPORT ===\n" ..
         "Vehicle: %s\n" ..
         "Plate: %s\n" ..
         "Version: %d\n" ..
-        "─────────────────────────────\n" ..
+        "-----------------------------\n" ..
         "Max Speed: %.1f km/h\n" ..
         "0-100 km/h: %s\n" ..
         "0-200 km/h: %s\n" ..
@@ -80,7 +80,7 @@ RegisterNUICallback('copyResults', function(data, cb)
         "200-0 km/h: %s\n" ..
         "Lateral G: %.2f G\n" ..
         "Duration: %.1f s\n" ..
-        "═══════════════════════════",
+        "=============================",
         result.vehicle_name or 'Unknown',
         result.plate or 'Unknown',
         result.version or 1,
@@ -109,6 +109,12 @@ RegisterNUICallback('getVersionResults', function(data, cb)
     else
         cb({ success = false, message = 'Version not found' })
     end
+end)
+
+-- Close checkcar overlay from NUI
+RegisterNUICallback('closeCheckcar', function(data, cb)
+    checkcarActive = false
+    cb('ok')
 end)
 
 -- Toggle NUI visibility

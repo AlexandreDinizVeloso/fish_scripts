@@ -1,6 +1,7 @@
 --[[
     FISH Telemetry - Client Main Module
     Vehicle telemetry recording and analysis system
+    Hotkeys: G (record), K (vehicle class), U (checkcar)
 ]]
 
 local isRecording = false
@@ -44,6 +45,27 @@ local maxLateralG = 0.0
 local previousLateralAccel = 0.0
 local accelerationStartTime = 0
 
+-- ============================================
+-- K KEY STATE: Vehicle Class/Rank Display
+-- ============================================
+local kLabelsActive = false
+local kLabelsStart = 0
+local kLabelsData = {}
+local K_LABEL_DURATION = 3000  -- 3 seconds visible
+local K_LABEL_FADE = 1000      -- 1 second fade
+
+-- ============================================
+-- U KEY STATE: Checkcar Overlay
+-- ============================================
+local checkcarActive = false
+local CHECKCAR_DISPLAY_TIME = 15000 -- 15 seconds
+
+-- ============================================
+-- HUD STATE: Telemetry Recording HUD
+-- ============================================
+local hudLastUpdate = 0
+local HUD_UPDATE_INTERVAL = 250 -- ms between HUD updates
+
 -- Helper: Get current vehicle
 function GetCurrentVehicle()
     local ped = PlayerPedId()
@@ -83,6 +105,22 @@ local function HasChangedSignificantly(oldVal, newVal, threshold)
     if oldVal == 0 and newVal == 0 then return false end
     local base = math.max(math.abs(oldVal), 1.0)
     return math.abs(newVal - oldVal) / base > threshold
+end
+
+-- Helper: Get condition label from health percentage
+local function GetConditionLabel(health)
+    if health >= 90 then return 'Excellent'
+    elseif health >= 75 then return 'Good'
+    elseif health >= 50 then return 'Fair'
+    elseif health >= 25 then return 'Poor'
+    else return 'Critical' end
+end
+
+-- Helper: Format seconds to MM:SS
+local function FormatDuration(seconds)
+    local mins = math.floor(seconds / 60)
+    local secs = math.floor(seconds % 60)
+    return string.format('%02d:%02d', mins, secs)
 end
 
 -- Reset recording data
@@ -248,7 +286,18 @@ local function CollectDataPoint()
     previousVel = currentVel
     lastDataTime = currentTime
 
-    -- Send live data to NUI
+    -- Always send HUD update during recording (independent of main panel)
+    if currentTime - hudLastUpdate >= HUD_UPDATE_INTERVAL then
+        SendNUIMessage({
+            type = 'updateHud',
+            speed = speed,
+            elapsed = elapsed / 1000.0,
+            recording = true
+        })
+        hudLastUpdate = currentTime
+    end
+
+    -- Send live data to NUI main panel (only when panel is open)
     if nuiOpen then
         SendNUIMessage({
             type = 'updateLive',
@@ -298,7 +347,13 @@ function StartRecording()
     currentData.plate = GetPlate and GetPlate(veh) or GetVehiclePlate(veh)
     currentData.startSpeed = 0
 
-    -- Notify NUI
+    -- Notify NUI to show HUD
+    SendNUIMessage({
+        type = 'showHud',
+        vehicleName = currentData.vehicleName
+    })
+
+    -- Notify NUI main panel
     SendNUIMessage({
         type = 'recordingStarted',
         vehicleName = currentData.vehicleName,
@@ -383,7 +438,6 @@ function StopRecording()
             -- Archive current best as a version
             table.insert(vehicleVersions, DeepCopy(bestResults))
             currentVersion = #vehicleVersions + 1
-            -- Version detected notification will be handled when UI is open next time or via toast
             SendNUIMessage({
                 type = 'versionDetected',
                 version = currentVersion,
@@ -396,7 +450,6 @@ function StopRecording()
     if bestResults == nil then
         bestResults = DeepCopy(result)
     else
-        -- Compare and keep best (lower times are better, higher speed/G is better)
         if result.max_speed > (bestResults.max_speed or 0) then
             bestResults.max_speed = result.max_speed
         end
@@ -424,9 +477,12 @@ function StopRecording()
     TriggerServerEvent('fish_telemetry:saveResults', result)
 
     -- Copy result to clipboard
-    local resultText = string.format("Veículo: %s | Max Speed: %.1f km/h | 0-100: %.2fs | 100-0: %.2fs | 200-0: %.2fs | Lateral G: %.2f", 
+    local resultText = string.format("Veiculo: %s | Max Speed: %.1f km/h | 0-100: %.2fs | 100-0: %.2fs | 200-0: %.2fs | Lateral G: %.2f", 
         result.vehicle_name, result.max_speed, result.zero_to_100 or 0.0, result.hundred_to_zero or 0.0, result.two_hundred_to_zero or 0.0, result.lateral_gforce or 0.0)
     
+    -- Hide HUD
+    SendNUIMessage({ type = 'hideHud' })
+
     -- Notify NUI to close UI and copy to clipboard
     SendNUIMessage({
         type = 'recordingStopped',
@@ -450,60 +506,303 @@ function ToggleRecording()
     end
 end
 
--- Show nearby vehicle ratings (hold K)
-local showingRatings = false
-local ratingsThread = nil
+-- ============================================
+-- G KEY: Toggle Telemetry Recording
+-- ============================================
+RegisterCommand('toggleTelemetry', function()
+    ToggleRecording()
+end, false)
 
-function ShowNearbyVehicleRatings()
-    if showingRatings then return end
-    showingRatings = true
+RegisterKeyMapping('toggleTelemetry', 'Start/Stop Telemetry Recording', 'keyboard', 'G')
 
-    ratingsThread = Citizen.CreateThread(function()
-        while showingRatings do
-            local ped = PlayerPedId()
-            local pos = GetEntityCoords(ped)
-            local vehicles = GetGamePool('CVehicle')
+-- ============================================
+-- K KEY: Vehicle Class/Rank Display
+-- Shows 3D floating text above nearby vehicles
+-- ============================================
+RegisterCommand('vehicle_class_check', function()
+    if kLabelsActive then return end
+    kLabelsActive = true
+    kLabelsStart = GetGameTimer()
+    kLabelsData = {}
 
-            local nearbyVehicles = {}
-            for _, veh in ipairs(vehicles) do
-                local vehPos = GetEntityCoords(veh)
-                local dist = #(pos - vehPos)
-                if dist < 50.0 and veh ~= GetCurrentVehicle() then
-                    local plate = GetVehiclePlate(veh)
-                    local name = GetVehicleDisplayName(veh)
-                    table.insert(nearbyVehicles, {
-                        plate = plate,
+    local ped = PlayerPedId()
+    local pos = GetEntityCoords(ped)
+    local vehicles = GetGamePool('CVehicle')
+    local myVeh = GetCurrentVehicle()
+
+    for _, veh in ipairs(vehicles) do
+        if DoesEntityExist(veh) then
+            local vehPos = GetEntityCoords(veh)
+            local dist = #(pos - vehPos)
+            if dist < 50.0 then
+                local success, result = pcall(function()
+                    return exports.fish_normalizer:GetVehicleRank(veh)
+                end)
+                if success and result and result.rank then
+                    local name = 'Unknown'
+                    pcall(function() name = GetVehicleDisplayName(veh) end)
+                    table.insert(kLabelsData, {
+                        vehicle = veh,
+                        rank = result.rank,
+                        score = result.score or 0,
                         name = name,
-                        distance = dist
+                        isPlayer = (veh == myVeh)
                     })
                 end
             end
+        end
+    end
 
-            -- Try to get telemetry data from server
-            if #nearbyVehicles > 0 then
-                TriggerServerEvent('fish_telemetry:requestNearbyData', nearbyVehicles)
+    -- Sort by distance (closest first)
+    table.sort(kLabelsData, function(a, b)
+        local posA = GetEntityCoords(a.vehicle)
+        local posB = GetEntityCoords(b.vehicle)
+        return #(pos - posA) < #(pos - posB)
+    end)
+
+    -- Limit to 15 vehicles to avoid performance issues
+    if #kLabelsData > 15 then
+        local limited = {}
+        for i = 1, 15 do
+            table.insert(limited, kLabelsData[i])
+        end
+        kLabelsData = limited
+    end
+
+    if #kLabelsData == 0 then
+        ShowNotification("~y~No nearby vehicles found.")
+        kLabelsActive = false
+        return
+    end
+
+    ShowNotification("~b~Showing class for " .. #kLabelsData .. " nearby vehicles.")
+
+    -- Start render thread
+    Citizen.CreateThread(function()
+        while kLabelsActive do
+            local now = GetGameTimer()
+            local elapsed = now - kLabelsStart
+
+            if elapsed > K_LABEL_DURATION + K_LABEL_FADE then
+                kLabelsActive = false
+                break
             end
 
-            Citizen.Wait(1000)
+            local alpha = 255
+            if elapsed > K_LABEL_DURATION then
+                alpha = math.floor(255 * (1.0 - (elapsed - K_LABEL_DURATION) / K_LABEL_FADE))
+                if alpha < 0 then alpha = 0 end
+            end
+
+            for _, label in ipairs(kLabelsData) do
+                if DoesEntityExist(label.vehicle) then
+                    local vehPos = GetEntityCoords(label.vehicle)
+                    local drawPos = vehPos + vector3(0, 0, 1.5)
+                    local onScreen, screenX, screenY = World3dToScreen2d(drawPos.x, drawPos.y, drawPos.z)
+
+                    if onScreen then
+                        local color = label.rank.color or '#FFFFFF'
+                        local r = tonumber(color:sub(2,3), 16) or 255
+                        local g = tonumber(color:sub(4,5), 16) or 255
+                        local b = tonumber(color:sub(6,7), 16) or 255
+
+                        -- Main class/score text
+                        SetTextScale(0.38, 0.38)
+                        SetTextFont(4)
+                        SetTextProportional(true)
+                        SetTextColour(r, g, b, alpha)
+                        SetTextDropshadow(2, 0, 0, 0, alpha)
+                        SetTextEdge(2, 0, 0, 0, math.floor(alpha * 0.6))
+                        SetTextDropShadow()
+                        SetTextOutline()
+                        SetTextEntry('STRING')
+                        local prefix = label.isPlayer and '\xe2\x98\x85 ' or ''
+                        AddTextComponentString(prefix .. label.rank.name .. ': ' .. label.score)
+                        DrawText(screenX, screenY)
+
+                        -- Vehicle name below (smaller)
+                        SetTextScale(0.25, 0.25)
+                        SetTextFont(4)
+                        SetTextProportional(true)
+                        SetTextColour(200, 200, 200, math.floor(alpha * 0.7))
+                        SetTextDropshadow(1, 0, 0, 0, math.floor(alpha * 0.7))
+                        SetTextDropShadow()
+                        SetTextOutline()
+                        SetTextEntry('STRING')
+                        AddTextComponentString(label.name)
+                        DrawText(screenX, screenY + 0.028)
+                    end
+                end
+            end
+
+            Citizen.Wait(0)
         end
     end)
-end
-
-function HideNearbyVehicleRatings()
-    showingRatings = false
-    if ratingsThread then
-        ratingsThread = nil
-    end
-    SendNUIMessage({ type = 'hideRatings' })
-end
-
--- Key bindings
-RegisterCommand('telemetry_record', function()
-    ToggleRecording()
 end, false)
-RegisterKeyMapping('telemetry_record', 'Toggle Telemetry Recording', 'keyboard', 'G')
+RegisterKeyMapping('vehicle_class_check', 'Check Vehicle Class/Rank', 'keyboard', 'K')
 
+-- ============================================
+-- U KEY: Vehicle Health Check (Checkcar)
+-- Shows NUI overlay with vehicle health data
+-- ============================================
+RegisterCommand('checkcar_hud', function()
+    if checkcarActive then
+        -- Toggle off
+        checkcarActive = false
+        SendNUIMessage({ type = 'hideCheckcar' })
+        return
+    end
+
+    local veh = GetCurrentVehicle()
+    if not veh then
+        ShowNotification("~r~You must be in a vehicle to inspect it.")
+        return
+    end
+
+    local plate = GetVehiclePlate(veh)
+    local model = GetEntityModel(veh)
+    local displayName = 'Unknown'
+    pcall(function() displayName = GetDisplayNameFromVehicleModel(model) end)
+
+    -- Request health data from fish_tunes server
+    TriggerServerEvent('fish_tunes:requestCheckCar', plate)
+
+    -- Get heat from tunes if available
+    local heat = 0
+    pcall(function()
+        heat = exports.fish_tunes:GetVehicleHeat(veh) or 0
+    end)
+
+    -- Show loading state in NUI
+    SendNUIMessage({
+        type = 'showCheckcar',
+        data = {
+            vehicleName = displayName,
+            plate = plate,
+            loading = true,
+            heat = heat
+        }
+    })
+
+    checkcarActive = true
+
+    -- Auto-dismiss after timeout
+    Citizen.CreateThread(function()
+        Citizen.Wait(CHECKCAR_DISPLAY_TIME)
+        if checkcarActive then
+            checkcarActive = false
+            SendNUIMessage({ type = 'hideCheckcar' })
+        end
+    end)
+end, false)
+RegisterKeyMapping('checkcar_hud', 'Vehicle Health Check', 'keyboard', 'U')
+
+-- Also register /checkcar command to use the same NUI overlay
+RegisterCommand('checkcar', function()
+    if checkcarActive then
+        checkcarActive = false
+        SendNUIMessage({ type = 'hideCheckcar' })
+        return
+    end
+
+    local veh = GetCurrentVehicle()
+    if not veh then
+        ShowNotification("~r~You must be in a vehicle to inspect it.")
+        return
+    end
+
+    local plate = GetVehiclePlate(veh)
+    local model = GetEntityModel(veh)
+    local displayName = 'Unknown'
+    pcall(function() displayName = GetDisplayNameFromVehicleModel(model) end)
+
+    TriggerServerEvent('fish_tunes:requestCheckCar', plate)
+
+    local heat = 0
+    pcall(function()
+        heat = exports.fish_tunes:GetVehicleHeat(veh) or 0
+    end)
+
+    SendNUIMessage({
+        type = 'showCheckcar',
+        data = {
+            vehicleName = displayName,
+            plate = plate,
+            loading = true,
+            heat = heat
+        }
+    })
+
+    checkcarActive = true
+
+    Citizen.CreateThread(function()
+        Citizen.Wait(CHECKCAR_DISPLAY_TIME)
+        if checkcarActive then
+            checkcarActive = false
+            SendNUIMessage({ type = 'hideCheckcar' })
+        end
+    end)
+end, false)
+
+-- Listen for checkcar health data from fish_tunes server
+RegisterNetEvent('fish_tunes:receiveCheckCar')
+AddEventHandler('fish_tunes:receiveCheckCar', function(healthData)
+    if not checkcarActive then return end
+
+    local veh = GetCurrentVehicle()
+    local plate = 'Unknown'
+    local displayName = 'Unknown'
+    if veh then
+        pcall(function()
+            plate = GetVehiclePlate(veh)
+            local model = GetEntityModel(veh)
+            displayName = GetDisplayNameFromVehicleModel(model)
+        end)
+    end
+
+    -- Get heat from tunes
+    local heat = 0
+    if veh then
+        pcall(function()
+            heat = exports.fish_tunes:GetVehicleHeat(veh) or 0
+        end)
+    end
+
+    -- Build display data
+    local engine = healthData and healthData.engine or { health = 100 }
+    local transmission = healthData and healthData.transmission or { health = 100 }
+    local suspension = healthData and healthData.suspension or { health = 100 }
+    local brakes = healthData and healthData.brakes or { health = 100 }
+    local tires = healthData and healthData.tires or { health = 100 }
+    local turbo = healthData and healthData.turbo or { health = 100 }
+    local overall = healthData and healthData.overall or { health = 100, mileage = 0 }
+
+    local overallHealth = overall.health or 100
+    local conditionLabel = GetConditionLabel(overallHealth)
+
+    SendNUIMessage({
+        type = 'showCheckcar',
+        data = {
+            vehicleName = displayName,
+            plate = plate,
+            loading = false,
+            condition = conditionLabel,
+            conditionHealth = overallHealth,
+            mileage = overall.mileage or 0,
+            engine = { health = engine.health or 100, status = GetConditionLabel(engine.health or 100) },
+            transmission = { health = transmission.health or 100, status = GetConditionLabel(transmission.health or 100) },
+            suspension = { health = suspension.health or 100, status = GetConditionLabel(suspension.health or 100) },
+            brakes = { health = brakes.health or 100, status = GetConditionLabel(brakes.health or 100) },
+            tires = { health = tires.health or 100, status = GetConditionLabel(tires.health or 100) },
+            turbo = { health = turbo.health or 100, status = GetConditionLabel(turbo.health or 100) },
+            heat = heat
+        }
+    })
+end)
+
+-- ============================================
 -- Notification helper
+-- ============================================
 function ShowNotification(msg)
     SetNotificationTextEntry('STRING')
     AddTextComponentString(msg)
@@ -520,13 +819,16 @@ function DeepCopy(orig)
     return copy
 end
 
+-- ============================================
+-- Exports
+-- ============================================
+
 -- Export: GetTelemetryData
 function GetTelemetryData(vehicle)
     if vehicle then
         local plate = GetVehiclePlate(vehicle)
         local data = nil
         TriggerServerEvent('fish_telemetry:requestData', plate)
-        -- Return last known data for this plate
         for _, v in pairs(vehicleVersions) do
             if v.plate == plate then
                 data = v
@@ -556,7 +858,11 @@ function ExportedResetRecordingData()
     ResetRecordingData()
 end
 
--- Receive nearby data from server
+-- ============================================
+-- Event Handlers
+-- ============================================
+
+-- Receive nearby data from server (legacy, kept for compatibility)
 RegisterNetEvent('fish_telemetry:receiveNearbyData')
 AddEventHandler('fish_telemetry:receiveNearbyData', function(data)
     if nuiOpen then

@@ -94,6 +94,198 @@ Config.PoliceHeatThreshold = 40 -- heat level where police attention starts
 Config.PoliceHeatMultiplier = 0.01 -- chance per heat point per check
 
 -- ============================================================
+-- Cost Configuration
+-- ============================================================
+
+-- Part install costs per level
+Config.PartCosts = {
+    stock = 0,
+    l1 = 1000,
+    l2 = 2500,
+    l3 = 5000,
+    l4 = 12000,
+    l5 = 25000
+}
+
+-- Drivetrain conversion cost
+Config.DrivetrainCost = 5000
+
+-- Class swap costs: from_to = cost
+-- Going up costs more, going down costs less
+Config.ClassSwapCosts = {
+    C_B = 10000,   -- C → B: upgrade
+    C_A = 30000,   -- C → A: big upgrade
+    B_C = 5000,    -- B → C: downgrade
+    B_A = 20000,   -- B → A: upgrade
+    A_C = 5000,    -- A → C: downgrade
+    A_B = 5000     -- A → B: downgrade
+}
+
+-- Class swap config
+Config.ClassSwap = {
+    allowed_classes = { 'C', 'B', 'A' }, -- S is NOT achievable via swap
+    default_class = 'C'
+}
+
+-- Crafting recipe definitions (updated for part level naming)
+Config.CraftingRecipes = {
+    l1_engine = {
+        id = 'l1_engine',
+        label = 'L1 Engine',
+        description = 'Basic performance engine upgrade — improved combustion efficiency',
+        icon = '⚙️',
+        category = 'engine',
+        level = 'l1',
+        difficulty = 40,
+        success_rate = 85,
+        crafting_time = 120,
+        cost = 800,
+        materials = { steel = 5, aluminum = 3 },
+        output = { part_category = 'engine', part_level = 'l1' }
+    },
+    l2_engine = {
+        id = 'l2_engine',
+        label = 'L2 Engine',
+        description = 'Mid-tier engine with forged internals and ported heads',
+        icon = '⚙️',
+        category = 'engine',
+        level = 'l2',
+        difficulty = 60,
+        success_rate = 75,
+        crafting_time = 240,
+        cost = 2000,
+        materials = { steel = 10, aluminum = 6, titanium = 2 },
+        output = { part_category = 'engine', part_level = 'l2' }
+    },
+    l1_turbo = {
+        id = 'l1_turbo',
+        label = 'L1 Turbo',
+        description = 'Basic turbocharger kit — mild boost increase',
+        icon = '💨',
+        category = 'turbo',
+        level = 'l1',
+        difficulty = 45,
+        success_rate = 80,
+        crafting_time = 150,
+        cost = 1000,
+        materials = { aluminum = 5, steel = 4 },
+        output = { part_category = 'turbo', part_level = 'l1' }
+    },
+    l2_turbo = {
+        id = 'l2_turbo',
+        label = 'L2 Turbo',
+        description = 'Performance turbo with larger compressor wheel',
+        icon = '💨',
+        category = 'turbo',
+        level = 'l2',
+        difficulty = 60,
+        success_rate = 72,
+        crafting_time = 300,
+        cost = 2500,
+        materials = { aluminum = 8, steel = 8, precision_bearing = 2 },
+        output = { part_category = 'turbo', part_level = 'l2' }
+    },
+    l3_turbo = {
+        id = 'l3_turbo',
+        label = 'L3 Turbo',
+        description = 'High-performance twin-scroll turbo system',
+        icon = '💨',
+        category = 'turbo',
+        level = 'l3',
+        difficulty = 75,
+        success_rate = 65,
+        crafting_time = 420,
+        cost = 5000,
+        materials = { aluminum = 12, steel = 10, precision_bearing = 4, titanium = 3 },
+        output = { part_category = 'turbo', part_level = 'l3' }
+    },
+    l4_turbo = {
+        id = 'l4_turbo',
+        label = 'L4 Turbo',
+        description = 'Race-spec turbo — significant boost, requires supporting mods',
+        icon = '💨',
+        category = 'turbo',
+        level = 'l4',
+        difficulty = 88,
+        success_rate = 55,
+        crafting_time = 600,
+        cost = 12000,
+        materials = { aluminum = 20, steel = 15, precision_bearing = 6, titanium = 8, rare_alloy = 2 },
+        output = { part_category = 'turbo', part_level = 'l4' }
+    },
+    l1_suspension = {
+        id = 'l1_suspension',
+        label = 'L1 Suspension',
+        description = 'Sport springs and dampers — improved ride control',
+        icon = '🔧',
+        category = 'suspension',
+        level = 'l1',
+        difficulty = 35,
+        success_rate = 88,
+        crafting_time = 100,
+        cost = 600,
+        materials = { steel = 6, oil = 3 },
+        output = { part_category = 'suspension', part_level = 'l1' }
+    },
+    l2_suspension = {
+        id = 'l2_suspension',
+        label = 'L2 Suspension',
+        description = 'Adjustable coilover system with stiffer rates',
+        icon = '🔧',
+        category = 'suspension',
+        level = 'l2',
+        difficulty = 55,
+        success_rate = 78,
+        crafting_time = 200,
+        cost = 1800,
+        materials = { steel = 12, aluminum = 6, oil = 5, springs = 2 },
+        output = { part_category = 'suspension', part_level = 'l2' }
+    },
+    l5_suspension = {
+        id = 'l5_suspension',
+        label = 'L5 Suspension',
+        description = 'Full race suspension — maximum grip and control',
+        icon = '🔧',
+        category = 'suspension',
+        level = 'l5',
+        difficulty = 95,
+        success_rate = 45,
+        crafting_time = 720,
+        cost = 25000,
+        materials = { steel = 30, aluminum = 20, oil = 10, springs = 8, titanium = 10, rare_alloy = 5 },
+        output = { part_category = 'suspension', part_level = 'l5' }
+    },
+    l1_brakes = {
+        id = 'l1_brakes',
+        label = 'L1 Brakes',
+        description = 'Upgraded brake pads and slotted rotors',
+        icon = '🛑',
+        category = 'brakes',
+        level = 'l1',
+        difficulty = 30,
+        success_rate = 90,
+        crafting_time = 80,
+        cost = 500,
+        materials = { steel = 4, ceramic = 2 },
+        output = { part_category = 'brakes', part_level = 'l1' }
+    },
+    l3_brakes = {
+        id = 'l3_brakes',
+        label = 'L3 Brakes',
+        description = 'Big brake kit — 6-piston calipers, drilled rotors',
+        icon = '🛑',
+        category = 'brakes',
+        level = 'l3',
+        difficulty = 70,
+        success_rate = 68,
+        crafting_time = 300,
+        cost = 4500,
+        materials = { steel = 15, ceramic = 10, brake_fluid = 5, aluminum = 5 },
+        output = { part_category = 'brakes', part_level = 'l3' }
+    }
+}
+
+-- ============================================================
 -- Engine Degradation System
 -- ============================================================
 
@@ -102,22 +294,20 @@ Config.Degradation = {
     updateInterval = 30000, -- Check degradation every 30 seconds in-game
 }
 
--- Degradation rates per part (health points lost per event)
--- Rates can be modified based on part level and tuning efficiency
 Config.DegradationRates = {
     engine = {
-        base_rate = 0.5, -- per 1000km normal driving
+        base_rate = 0.5,
         harsh_acceleration_multiplier = 2.0,
         overspeed_multiplier = 1.5,
-        poor_tuning_multiplier = 3.0, -- if AFR is bad (outside 13.2-13.8)
-        turbo_wear_multiplier = 2.5 -- extra wear if turbo installed
+        poor_tuning_multiplier = 3.0,
+        turbo_wear_multiplier = 2.5
     },
     transmission = {
         base_rate = 0.3,
         harsh_acceleration_multiplier = 1.8,
         overspeed_multiplier = 1.2,
         poor_tuning_multiplier = 2.0,
-        manual_mode_multiplier = 0.8 -- manual tuning is gentler
+        manual_mode_multiplier = 0.8
     },
     suspension = {
         base_rate = 0.4,
@@ -132,7 +322,7 @@ Config.DegradationRates = {
         poor_tuning_multiplier = 1.5
     },
     tires = {
-        base_rate = 0.6, -- tires wear faster
+        base_rate = 0.6,
         rough_handling_multiplier = 2.2,
         overspeed_multiplier = 1.8,
         poor_tuning_multiplier = 1.3,
@@ -142,21 +332,19 @@ Config.DegradationRates = {
         base_rate = 0.4,
         harsh_acceleration_multiplier = 3.0,
         overspeed_multiplier = 2.5,
-        poor_tuning_multiplier = 4.0, -- turbo sensitive to tuning
-        boost_pressure_multiplier = 1.2 -- high boost = more wear
+        poor_tuning_multiplier = 4.0,
+        boost_pressure_multiplier = 1.2
     }
 }
 
--- Mileage thresholds for automatic degradation events
 Config.MileageThresholds = {
-    {distance = 1000, degradation = 1},    -- -1 health at 1000km
-    {distance = 5000, degradation = 3},    -- -3 health at 5000km
-    {distance = 10000, degradation = 5},   -- -5 health at 10000km
-    {distance = 25000, degradation = 10},  -- -10 health at 25000km
-    {distance = 50000, degradation = 15},  -- -15 health at 50000km
+    {distance = 1000, degradation = 1},
+    {distance = 5000, degradation = 3},
+    {distance = 10000, degradation = 5},
+    {distance = 25000, degradation = 10},
+    {distance = 50000, degradation = 15},
 }
 
--- Health status thresholds
 Config.HealthStatus = {
     excellent = { min = 90, label = 'Excellent ✅', color = '#66BB6A' },
     good = { min = 75, label = 'Good 👍', color = '#4FC3F7' },
@@ -165,7 +353,6 @@ Config.HealthStatus = {
     critical = { min = 0, label = 'Critical ❌', color = '#FF1744' }
 }
 
--- Performance impact per health level (percentage multiplier)
 Config.HealthPerformanceImpact = {
     engine = function(health)
         if health >= 90 then return 1.0
@@ -204,24 +391,22 @@ Config.HealthPerformanceImpact = {
     end
 }
 
--- AFR (Air-Fuel Ratio) tuning parameters
 Config.AFRTuning = {
     optimal_range_min = 13.2,
     optimal_range_max = 13.8,
     optimal_peak = 13.5,
-    lean_threshold = 12.0,  -- too lean, engine damage risk
-    rich_threshold = 14.5,  -- too rich, power loss
-    lean_damage_multiplier = 3.0,  -- high degradation if too lean
-    rich_power_loss = 0.85  -- 15% power loss if too rich
+    lean_threshold = 12.0,
+    rich_threshold = 14.5,
+    lean_damage_multiplier = 3.0,
+    rich_power_loss = 0.85
 }
 
--- Dyno tuning parameters
 Config.DynoTuning = {
     enabled = true,
-    engine_max_temp = 110, -- celsius, can explode if exceeded
+    engine_max_temp = 110,
     damage_rate_per_degree_above_max = 2.0,
     ignition_timing_range = {min = -10, max = 10},
     fuel_table_range = {min = 50, max = 150},
     final_drive_range = {min = 1.5, max = 4.5},
-    boost_pressure_range = {min = 0, max = 30} -- PSI
+    boost_pressure_range = {min = 0, max = 30}
 }

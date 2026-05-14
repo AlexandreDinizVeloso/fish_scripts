@@ -68,11 +68,22 @@ AddEventHandler('fish_tunes:requestAdvancedData', function(plate)
         afr = 13.5, timing = 0, boost = 0, drive = 3.55
     }
     local dtData = tunesDataCache[plate] and tunesDataCache[plate].drivetrain or "AWD"
-    
+
     local engines = EngineSwap.GetAvailableEngines()
     local recipes = PartCrafting.GetAllRecipes()
-    
-    TriggerClientEvent('fish_tunes:openAdvancedNUI', src, plate, dynoData, dtData, engines, recipes)
+
+    -- Get health data
+    local healthData = GetVehicleHealthSummary(plate)
+
+    -- Get class data from normalizer
+    local normalizer = exports['fish_normalizer']
+    local vehicleData = normalizer:GetVehicleDataServer(plate)
+    local classData = {
+        currentClass = vehicleData and vehicleData.rank or 'C',
+        score = vehicleData and vehicleData.score or 0
+    }
+
+    TriggerClientEvent('fish_tunes:openAdvancedNUI', src, plate, dynoData, dtData, engines, recipes, healthData, classData)
 end)
 
 RegisterNetEvent('fish_tunes:swapEngineServer')
@@ -290,7 +301,7 @@ function GetVehicleHealthSummary(plate)
             status = GetHealthStatus(vehicleData.turbo_health or 100)
         },
         overall = {
-            health = math.floor((vehicleData.engine_health + vehicleData.transmission_health + vehicleData.suspension_health + vehicleData.brakes_health + vehicleData.tires_health + vehicleData.turbo_health) / 6),
+            health = math.floor(((vehicleData.engine_health or 100) + (vehicleData.transmission_health or 100) + (vehicleData.suspension_health or 100) + (vehicleData.brakes_health or 100) + (vehicleData.tires_health or 100) + (vehicleData.turbo_health or 100)) / 6),
             mileage = vehicleData.mileage or 0,
             harsh_events = vehicleData.harsh_acceleration_events or 0,
             overspeed_events = vehicleData.overspeed_events or 0
@@ -347,3 +358,203 @@ exports('UpdateVehicleMileage', UpdateVehicleMileage)
 exports('ApplyDegradation', ApplyDegradation)
 exports('RepairVehicle', RepairVehicle)
 exports('GetHealthStatus', GetHealthStatus)
+
+-- ============================================================
+-- Class Swap System
+-- ============================================================
+
+RegisterNetEvent('fish_tunes:swapClassServer')
+AddEventHandler('fish_tunes:swapClassServer', function(plate, targetClass)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+
+    -- Validate target class
+    local allowed = Config.ClassSwap and Config.ClassSwap.allowed_classes or { 'C', 'B', 'A' }
+    local valid = false
+    for _, c in ipairs(allowed) do
+        if c == targetClass then valid = true; break end
+    end
+    if not valid then
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Invalid target class.')
+        return
+    end
+
+    -- Get current class from normalizer
+    local normalizer = exports['fish_normalizer']
+    local vehicleData = normalizer:GetVehicleDataServer(plate)
+    if not vehicleData then
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Vehicle data not found.')
+        return
+    end
+
+    local currentClass = vehicleData.rank or 'C'
+    if currentClass == targetClass then
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Vehicle is already class ' .. targetClass)
+        return
+    end
+
+    -- S class is not achievable via swap
+    if targetClass == 'S' or targetClass == 'X' then
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Class S/X cannot be achieved via swap.')
+        return
+    end
+
+    -- Calculate cost
+    local costKey = currentClass .. '_' .. targetClass
+    local costs = Config.ClassSwapCosts or {}
+    local cost = costs[costKey] or 10000
+
+    -- Check money
+    if not player.Functions.RemoveMoney('bank', cost, 'class-swap') then
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Not enough money. Need $' .. cost)
+        return
+    end
+
+    -- Apply class change - modify the vehicle's normalized stats
+    -- We use the normalizer's archetype modifiers to shift the score
+    local scoreRanges = { C = {0, 499}, B = {500, 749}, A = {750, 899} }
+    local targetRange = scoreRanges[targetClass]
+    if not targetRange then
+        player.Functions.AddMoney('bank', cost, 'class-swap-refund')
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Invalid class range.')
+        return
+    end
+
+    -- Set score to middle of target range
+    local newScore = math.floor((targetRange[1] + targetRange[2]) / 2)
+    vehicleData.score = newScore
+    vehicleData.rank = targetClass
+    vehicleData.classSwapped = true
+    vehicleData.classSwapTime = os.time()
+
+    normalizer:SaveVehicleData(plate, vehicleData)
+
+    TriggerClientEvent('fish_tunes:clientNotify', src, '~g~Class swapped to ' .. targetClass .. '! Cost: $' .. cost)
+    TriggerClientEvent('fish_tunes:classSwapped', src, plate, targetClass, newScore)
+end)
+
+-- ============================================================
+-- Part Installation with Costs
+-- ============================================================
+
+RegisterNetEvent('fish_tunes:installPartServer')
+AddEventHandler('fish_tunes:installPartServer', function(plate, category, level)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+
+    -- Get cost
+    local costs = Config.PartCosts or {}
+    local cost = costs[level] or 0
+
+    if cost > 0 then
+        if not player.Functions.RemoveMoney('bank', cost, 'part-install') then
+            TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Not enough money. Need $' .. cost)
+            return
+        end
+    end
+
+    -- Update tunes data
+    if not tunesDataCache[plate] then tunesDataCache[plate] = {} end
+    if not tunesDataCache[plate].parts then tunesDataCache[plate].parts = {} end
+    tunesDataCache[plate].parts[category] = level
+    tunesDataCache[plate].lastUpdated = os.time()
+
+    SaveTunesDataToFile()
+
+    -- Calculate totals
+    local totalBonuses = { top_speed = 0, acceleration = 0, handling = 0, braking = 0 }
+    local totalHeat = 0
+    for cat, lv in pairs(tunesDataCache[plate].parts) do
+        local bonuses = Config.PartBonuses[cat] and Config.PartBonuses[cat][lv]
+        if bonuses then
+            for stat, val in pairs(bonuses) do
+                if stat ~= 'instability' and stat ~= 'durability_loss' and totalBonuses[stat] then
+                    totalBonuses[stat] = totalBonuses[stat] + val
+                end
+            end
+        end
+        local levelInfo = Config.PartLevels[lv]
+        if levelInfo and not levelInfo.legal then
+            totalHeat = totalHeat + levelInfo.heat
+        end
+    end
+
+    TriggerClientEvent('fish_tunes:partInstalled', src, plate, category, level, totalBonuses, totalHeat)
+    TriggerClientEvent('fish_tunes:clientNotify', src, '~g~Part installed: ' .. (Config.PartLevels[level] and Config.PartLevels[level].label or level) .. ' ' .. category .. (cost > 0 and (' ($' .. cost .. ')') or ''))
+end)
+
+-- ============================================================
+-- Drivetrain Conversion with Cost
+-- ============================================================
+
+RegisterNetEvent('fish_tunes:convertDrivetrainServer')
+AddEventHandler('fish_tunes:convertDrivetrainServer', function(plate, drivetrain)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+
+    local cost = Config.DrivetrainCost or 5000
+    if not player.Functions.RemoveMoney('bank', cost, 'drivetrain-convert') then
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Not enough money. Need $' .. cost)
+        return
+    end
+
+    if not tunesDataCache[plate] then tunesDataCache[plate] = {} end
+    tunesDataCache[plate].drivetrain = drivetrain
+    tunesDataCache[plate].lastUpdated = os.time()
+    SaveTunesDataToFile()
+
+    -- Apply to vehicle
+    exports.fish_tunes:ApplyDrivetrainModifiers(GetVehiclePedIsIn(GetPlayerPed(src), false), drivetrain)
+    exports.fish_tunes:ClearDrivetrainCache(plate)
+
+    TriggerClientEvent('fish_tunes:clientNotify', src, '~g~Drivetrain converted to ' .. drivetrain .. ' ($' .. cost .. ')')
+end)
+
+-- ============================================================
+-- Repair Vehicle
+-- ============================================================
+
+RegisterNetEvent('fish_tunes:repairVehicleServer')
+AddEventHandler('fish_tunes:repairVehicleServer', function(plate, partType)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+
+    local repairCost = 2500 -- base repair cost
+    if not player.Functions.RemoveMoney('bank', repairCost, 'vehicle-repair') then
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Not enough money. Need $' .. repairCost)
+        return
+    end
+
+    local normalizer = exports['fish_normalizer']
+    local vehicleData = normalizer:GetVehicleDataServer(plate)
+    if not vehicleData then
+        player.Functions.AddMoney('bank', repairCost, 'vehicle-repair-refund')
+        TriggerClientEvent('fish_tunes:clientNotify', src, '~r~Vehicle data not found.')
+        return
+    end
+
+    if partType == 'all' then
+        vehicleData.engine_health = 100
+        vehicleData.transmission_health = 100
+        vehicleData.suspension_health = 100
+        vehicleData.brakes_health = 100
+        vehicleData.tires_health = 100
+        vehicleData.turbo_health = 100
+    else
+        local key = partType .. '_health'
+        if vehicleData[key] then
+            vehicleData[key] = 100
+        end
+    end
+    vehicleData.lastMaintained = os.time()
+
+    normalizer:SaveVehicleData(plate, vehicleData)
+
+    local healthSummary = GetVehicleHealthSummary(plate)
+    TriggerClientEvent('fish_tunes:healthData', src, healthSummary)
+    TriggerClientEvent('fish_tunes:clientNotify', src, '~g~Vehicle repaired! ($' .. repairCost .. ')')
+end)
