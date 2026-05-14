@@ -328,6 +328,17 @@ function SaveTunesData(plate, data)
 end
 
 -- ============================================================
+-- /checkcar - Vehicle Health Inspection
+-- ============================================================
+
+RegisterNetEvent('fish_tunes:requestCheckCar')
+AddEventHandler('fish_tunes:requestCheckCar', function(plate)
+    local src = source
+    local healthSummary = GetVehicleHealthSummary(plate)
+    TriggerClientEvent('fish_tunes:receiveCheckCar', src, healthSummary)
+end)
+
+-- ============================================================
 -- Exports
 -- ============================================================
 

@@ -3,6 +3,15 @@ local isNuiOpen = false
 local currentVehicle = nil
 local tunesData = {}
 
+-- Expose tunesData for other client scripts in this resource
+function GetTunesDataForPlate(plate)
+    return tunesData[plate]
+end
+
+function GetRawTunesData()
+    return tunesData
+end
+
 function GetCurrentVehicle()
     local ped = PlayerPedId()
     if IsPedInAnyVehicle(ped, false) then
@@ -236,6 +245,9 @@ RegisterNUICallback('convertDrivetrain', function(data, cb)
     TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
     exports.fish_tunes:ApplyDrivetrainModifiers(currentVehicle, data.drivetrain)
     
+    -- Clear drivetrain cache so new values take effect
+    exports.fish_tunes:ClearDrivetrainCache(plate)
+    
     ShowNotification('~g~Drivetrain converted to ' .. data.drivetrain)
     cb({success = true})
 end)
@@ -290,6 +302,12 @@ RegisterNUICallback('installPart', function(data, cb)
 
     TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
 
+    -- Trigger performance application
+    local vehicle = currentVehicle
+    if vehicle and DoesEntityExist(vehicle) then
+        TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
+    end
+
     cb({
         success = true,
         totalBonuses = tunes and tunes.bonuses or {},
@@ -311,6 +329,12 @@ RegisterNUICallback('uninstallPart', function(data, cb)
     local tunes = GetVehicleTunes(currentVehicle)
 
     TriggerServerEvent('fish_tunes:saveTunes', plate, tunesData[plate])
+
+    -- Trigger performance application
+    local vehicle = currentVehicle
+    if vehicle and DoesEntityExist(vehicle) then
+        TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
+    end
 
     cb({
         success = true,

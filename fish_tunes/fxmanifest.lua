@@ -16,7 +16,8 @@ client_scripts {
     'client/dyno.lua',
     'client/drivetrain.lua',
     'client/tires.lua',
-    'client/engine_swap.lua'
+    'client/engine_swap.lua',
+    'client/checkcar.lua'
 }
 
 server_scripts {
@@ -63,7 +64,13 @@ exports {
     'ApplyDynoTuning',
     'ApplyDrivetrainModifiers',
     'ApplyTireModifiers',
-    'ApplyEngineSwapModifiers'
+    'ApplyEngineSwapModifiers',
+    'ClearDrivetrainCache',
+    'ForceHandlingRefresh',
+    'DegradeTires',
+    'GetTireHealth',
+    'SetTireHealth',
+    'ClearTireCache'
 }
 
 server_exports {

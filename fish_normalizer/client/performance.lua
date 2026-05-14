@@ -1,35 +1,75 @@
 --[[
     FISH Normalizer - Performance Application
     Applies remap and tune bonuses to vehicles
+    
+    Architecture: Other resources PUSH data via events.
+    This file accumulates all modifiers and applies them as a single combined operation.
 ]]
 
-local vehicleCache = {}
-local remapData = {}
-local tuneData = {}
+-- Per-plate caches
+local originalHandlingCache = {}  -- Original base handling values
+local remapData = {}              -- Remap data pushed from fish_remaps
+local tuneData = {}               -- Tune data pushed from fish_tunes
+local appliedPlates = {}          -- Track which plates have been applied this session
 
--- Load remap data from fish_remaps
-local function LoadRemapData()
-    if GetResourceState('fish_remaps') == 'started' then
-        TriggerEvent('fish_remaps:requestPerformanceData', function(data)
-            remapData = data or {}
-        end)
-    end
-end
+-- ============================================================
+-- Data Push Event Handlers
+-- ============================================================
 
--- Load tune data from fish_tunes
-local function LoadTuneData()
-    if GetResourceState('fish_tunes') == 'started' then
-        TriggerEvent('fish_tunes:requestPerformanceData', function(data)
-            tuneData = data or {}
-        end)
-    end
-end
-
--- Get remap multipliers for a vehicle
-function GetRemapMultipliers(vehicle)
-    if not DoesEntityExist(vehicle) then return {} end
+-- Listen for remap updates from fish_remaps
+RegisterNetEvent('fish_remaps:performanceUpdated')
+AddEventHandler('fish_remaps:performanceUpdated', function(plate, data)
+    remapData[plate] = data
+    appliedPlates[plate] = nil  -- Force reapplication
     
-    local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+    -- Reapply immediately if player is in this vehicle
+    local ped = PlayerPedId()
+    if IsPedInAnyVehicle(ped, false) then
+        local vehicle = GetVehiclePedIsIn(ped, false)
+        if vehicle ~= 0 and DoesEntityExist(vehicle) then
+            local currentPlate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+            if currentPlate == plate then
+                ApplyPerformanceModifications(vehicle)
+            end
+        end
+    end
+end)
+
+-- Listen for tune updates from fish_tunes
+RegisterNetEvent('fish_tunes:performanceUpdated')
+AddEventHandler('fish_tunes:performanceUpdated', function(plate, data)
+    tuneData[plate] = data
+    appliedPlates[plate] = nil  -- Force reapplication
+    
+    -- Reapply immediately if player is in this vehicle
+    local ped = PlayerPedId()
+    if IsPedInAnyVehicle(ped, false) then
+        local vehicle = GetVehiclePedIsIn(ped, false)
+        if vehicle ~= 0 and DoesEntityExist(vehicle) then
+            local currentPlate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+            if currentPlate == plate then
+                ApplyPerformanceModifications(vehicle)
+            end
+        end
+    end
+end)
+
+-- Listen for reapply requests from other resources
+RegisterNetEvent('fish_normalizer:requestReapply')
+AddEventHandler('fish_normalizer:requestReapply', function(vehicle)
+    if vehicle and DoesEntityExist(vehicle) then
+        local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+        originalHandlingCache[plate] = nil  -- Reset cache to get fresh base values
+        appliedPlates[plate] = nil
+        ApplyPerformanceModifications(vehicle)
+    end
+end)
+
+-- ============================================================
+-- Remap Multiplier Calculation
+-- ============================================================
+
+local function GetRemapMultipliers(plate)
     local remap = remapData[plate]
     
     if not remap or not remap.finalStats then
@@ -51,14 +91,14 @@ function GetRemapMultipliers(vehicle)
     }
 end
 
--- Get tune bonuses for a vehicle
-function GetTuneMultipliers(vehicle)
-    if not DoesEntityExist(vehicle) then return {} end
-    
-    local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+-- ============================================================
+-- Tune Bonus Calculation
+-- ============================================================
+
+local function GetTuneMultipliers(plate)
     local tune = tuneData[plate]
     
-    if not tune or not tune.bonuses then
+    if not tune then
         return {
             top_speed = 0,
             acceleration = 0,
@@ -67,136 +107,185 @@ function GetTuneMultipliers(vehicle)
         }
     end
     
-    -- Convert bonuses from percentage (0-100) to raw increments
-    return {
-        top_speed = (tune.bonuses.top_speed or 0) * 0.5,
-        acceleration = (tune.bonuses.acceleration or 0) * 0.5,
-        handling = (tune.bonuses.handling or 0) * 0.5,
-        braking = (tune.bonuses.braking or 0) * 0.5
-    }
+    -- Calculate total bonuses from parts
+    local totalBonuses = { top_speed = 0, acceleration = 0, handling = 0, braking = 0 }
+    
+    if tune.parts then
+        for category, level in pairs(tune.parts) do
+            -- Try to get bonuses from the tunes config
+            local success, bonuses = pcall(function()
+                return exports.fish_tunes:GetPartBonuses(category, level)
+            end)
+            if success and bonuses then
+                for stat, val in pairs(bonuses) do
+                    if stat ~= 'instability' and stat ~= 'durability_loss' and totalBonuses[stat] then
+                        totalBonuses[stat] = totalBonuses[stat] + val
+                    end
+                end
+            end
+        end
+    end
+    
+    -- If we have pre-calculated bonuses from the data, use those
+    if tune.bonuses then
+        for stat, val in pairs(tune.bonuses) do
+            if totalBonuses[stat] ~= nil then
+                totalBonuses[stat] = val
+            end
+        end
+    end
+    
+    return totalBonuses
 end
 
--- Apply performance modifications to vehicle
+-- ============================================================
+-- Main Performance Application
+-- ============================================================
+
 function ApplyPerformanceModifications(vehicle)
     if not DoesEntityExist(vehicle) then return end
     
     local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
     
-    -- Ensure cache exists
-    if type(vehicleCache[plate]) ~= 'table' then
-        vehicleCache[plate] = {
+    -- Cache original handling values on first encounter
+    if not originalHandlingCache[plate] then
+        originalHandlingCache[plate] = {
             fInitialDriveMaxFlatVel = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveMaxFlatVel'),
             fInitialDriveForce = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveForce'),
             fBrakeForce = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fBrakeForce'),
             fTractionCurveMax = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMax'),
-            fTractionCurveMin = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMin')
+            fTractionCurveMin = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMin'),
+            fInitialDragCoeff = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDragCoeff'),
+            fClutchChangeRateScaleUpShift = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fClutchChangeRateScaleUpShift'),
+            fClutchChangeRateScaleDownShift = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fClutchChangeRateScaleDownShift')
         }
     end
-
-    local cache = vehicleCache[plate]
-    local remapMult = GetRemapMultipliers(vehicle)
-    local tuneMult = GetTuneMultipliers(vehicle)
     
-    -- Base handling values from cache
-    local baseTopSpeed = cache.fInitialDriveMaxFlatVel
-    local baseAccel = cache.fInitialDriveForce
-    local baseBraking = cache.fBrakeForce
-    local baseTractionMax = cache.fTractionCurveMax
-    local baseTractionMin = cache.fTractionCurveMin
+    local cache = originalHandlingCache[plate]
     
-    -- Apply remap multipliers
-    local finalTopSpeed = baseTopSpeed * remapMult.top_speed
-    local finalAccel = baseAccel * remapMult.acceleration
-    local finalBraking = baseBraking * remapMult.braking
-    local finalTractionMax = baseTractionMax * remapMult.handling
-    local finalTractionMin = baseTractionMin * remapMult.handling
+    -- Get remap multipliers
+    local remapMult = GetRemapMultipliers(plate)
     
-    -- Apply tune bonuses (treat tuneMult as percentage increase)
-    finalTopSpeed = finalTopSpeed * (1.0 + (tuneMult.top_speed / 100.0))
-    finalAccel = finalAccel * (1.0 + (tuneMult.acceleration / 100.0))
-    finalBraking = finalBraking * (1.0 + (tuneMult.braking / 100.0))
-    finalTractionMax = finalTractionMax * (1.0 + (tuneMult.handling / 100.0))
-    finalTractionMin = finalTractionMin * (1.0 + (tuneMult.handling / 100.0))
+    -- Get tune bonuses (raw percentage values)
+    local tuneBonus = GetTuneMultipliers(plate)
     
-    -- Apply modifications using FiveM natives (per-vehicle instance)
+    -- Start from base values
+    local finalTopSpeed = cache.fInitialDriveMaxFlatVel
+    local finalAccel = cache.fInitialDriveForce
+    local finalBraking = cache.fBrakeForce
+    local finalTractionMax = cache.fTractionCurveMax
+    local finalTractionMin = cache.fTractionCurveMin
+    
+    -- Layer 1: Apply remap multipliers (multiplicative from base)
+    finalTopSpeed = finalTopSpeed * remapMult.top_speed
+    finalAccel = finalAccel * remapMult.acceleration
+    finalBraking = finalBraking * remapMult.braking
+    finalTractionMax = finalTractionMax * remapMult.handling
+    finalTractionMin = finalTractionMin * remapMult.handling
+    
+    -- Layer 2: Apply tune bonuses (percentage increase on top of remap)
+    finalTopSpeed = finalTopSpeed * (1.0 + (tuneBonus.top_speed / 100.0))
+    finalAccel = finalAccel * (1.0 + (tuneBonus.acceleration / 100.0))
+    finalBraking = finalBraking * (1.0 + (tuneBonus.braking / 100.0))
+    finalTractionMax = finalTractionMax * (1.0 + (tuneBonus.handling / 100.0))
+    finalTractionMin = finalTractionMin * (1.0 + (tuneBonus.handling / 100.0))
+    
+    -- Apply combined modifications to vehicle handling
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDriveMaxFlatVel", finalTopSpeed)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDriveForce", finalAccel)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fBrakeForce", finalBraking)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMax", finalTractionMax)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMin", finalTractionMin)
-
-    local baseDrag = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDragCoeff')
-    if tuneMult.top_speed > 0 then
-        -- Lower drag by 15% if it has a top speed tune
-        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", baseDrag * 0.85)
+    
+    -- Apply drag reduction if top speed tune is active
+    if tuneBonus.top_speed > 0 then
+        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", cache.fInitialDragCoeff * 0.85)
+    else
+        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", cache.fInitialDragCoeff)
     end
-
-    -- Force update vehicle handling (may be required depending on FiveM version)
+    
+    -- Apply transmission shift speed bonus (from transmission tune parts)
+    -- Higher transmission bonuses = faster shifts
+    local shiftBonus = tuneBonus.acceleration or 0
+    if shiftBonus > 0 then
+        local shiftMult = 1.0 + (shiftBonus / 200.0)  -- Up to 50% faster shifts at max tune
+        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleUpShift", cache.fClutchChangeRateScaleUpShift * shiftMult)
+        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleDownShift", cache.fClutchChangeRateScaleDownShift * shiftMult)
+    else
+        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleUpShift", cache.fClutchChangeRateScaleUpShift)
+        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleDownShift", cache.fClutchChangeRateScaleDownShift)
+    end
+    
+    -- Force handling changes to take effect (FiveM workaround)
+    if GetResourceState('fish_tunes') == 'started' then
+        pcall(function() exports.fish_tunes:ForceHandlingRefresh(vehicle) end)
+    else
+        SetVehicleModKit(vehicle, 0)
+        for i = 0, 35 do
+            SetVehicleMod(vehicle, i, GetVehicleMod(vehicle, i), false)
+        end
+    end
+    
+    -- Force physics engine to apply changes
     ModifyVehicleTopSpeed(vehicle, 1.0)
-
-    SetEntityMaxSpeed(vehicle, finalTopSpeed / 2.8)
+    SetVehicleEnginePowerMultiplier(vehicle, 1.0) -- trick for flatvel
+    
+    -- Set entity max speed (1.3x factor for handling-to-actual speed difference)
+    -- fInitialDriveMaxFlatVel is in mph, convert to m/s
+    SetEntityMaxSpeed(vehicle, (finalTopSpeed * 1.3) / 2.236936)
+    SetVehicleMaxSpeed(vehicle, 0.0)
+    
+    appliedPlates[plate] = true
 end
 
--- Update vehicle performance when entering it
+-- ============================================================
+-- Vehicle Entry Detection Thread
+-- ============================================================
+
 Citizen.CreateThread(function()
+    local lastVehicle = nil
+    
     while true do
         Citizen.Wait(500)
         
         local ped = PlayerPedId()
         if IsPedInAnyVehicle(ped, false) then
             local vehicle = GetVehiclePedIsIn(ped, false)
-            if vehicle ~= 0 and DoesEntityExist(vehicle) then
+            if vehicle ~= 0 and DoesEntityExist(vehicle) and GetPedInVehicleSeat(vehicle, -1) == ped then
                 local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
                 
-                if not vehicleCache[plate] then
+                -- Apply on vehicle change OR if not yet applied
+                if vehicle ~= lastVehicle or not appliedPlates[plate] then
+                    lastVehicle = vehicle
                     ApplyPerformanceModifications(vehicle)
                 end
             end
+        else
+            lastVehicle = nil
         end
     end
 end)
 
--- Request data on startup
+-- ============================================================
+-- Server Data Sync (receive saved data on connect)
+-- ============================================================
+
+RegisterNetEvent('fish_normalizer:receivePerformanceData')
+AddEventHandler('fish_normalizer:receivePerformanceData', function(rData, tData)
+    if rData then
+        for plate, data in pairs(rData) do
+            remapData[plate] = data
+        end
+    end
+    if tData then
+        for plate, data in pairs(tData) do
+            tuneData[plate] = data
+        end
+    end
+end)
+
+-- Request saved performance data from server on spawn
 Citizen.CreateThread(function()
-    Citizen.Wait(3000)
-    LoadRemapData()
-    LoadTuneData()
-end)
-
--- Listen for remap updates
-RegisterNetEvent('fish_remaps:performanceUpdated')
-AddEventHandler('fish_remaps:performanceUpdated', function(plate, data)
-    remapData[plate] = data
-    -- Reapply immediately if player is in the vehicle
-    local ped = PlayerPedId()
-    if IsPedInAnyVehicle(ped, false) then
-        local vehicle = GetVehiclePedIsIn(ped, false)
-        local currentPlate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
-        if currentPlate == plate then
-            ApplyPerformanceModifications(vehicle)
-        else
-            vehicleCache[plate] = nil -- Force re-read next time
-        end
-    else
-        vehicleCache[plate] = nil
-    end
-end)
-
--- Listen for tune updates
-RegisterNetEvent('fish_tunes:performanceUpdated')
-AddEventHandler('fish_tunes:performanceUpdated', function(plate, data)
-    tuneData[plate] = data
-    -- Reapply immediately if player is in the vehicle
-    local ped = PlayerPedId()
-    if IsPedInAnyVehicle(ped, false) then
-        local vehicle = GetVehiclePedIsIn(ped, false)
-        local currentPlate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
-        if currentPlate == plate then
-            ApplyPerformanceModifications(vehicle)
-        else
-            vehicleCache[plate] = nil
-        end
-    else
-        vehicleCache[plate] = nil
-    end
+    Citizen.Wait(5000)  -- Wait for other resources to load
+    TriggerServerEvent('fish_normalizer:requestPerformanceData')
 end)

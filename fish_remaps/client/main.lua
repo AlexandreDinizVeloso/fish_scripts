@@ -243,6 +243,9 @@ RegisterNUICallback('confirmRemap', function(data, cb)
 
     remapData[plate] = remapInfo
     TriggerServerEvent('fish_remaps:saveRemap', plate, remapInfo)
+    
+    -- Trigger normalizer to apply remap performance changes
+    TriggerEvent('fish_remaps:performanceUpdated', plate, remapInfo)
 
     ShowNotification('~g~Vehicle remap applied successfully!')
     cb('ok')

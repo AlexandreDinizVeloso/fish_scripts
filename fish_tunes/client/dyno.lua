@@ -44,7 +44,7 @@ function ApplyDynoTuning(vehicle, dynoData)
         -- Modify top speed
         local speedModifier = (3.55 / driveRatio)
         local newMaxSpeed = handlingInitialDriveMaxFlatVel * speedModifier
-        SetEntityMaxSpeed(vehicle, newMaxSpeed / 3.6) -- Convert km/h to m/s
+        SetEntityMaxSpeed(vehicle, (newMaxSpeed * 1.3) / 2.236936) -- Convert mph to m/s with 1.3x factor
     end
 end
 
