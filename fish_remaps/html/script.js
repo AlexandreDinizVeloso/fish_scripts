@@ -601,7 +601,7 @@
     document.getElementById('btnApplyTransMode').addEventListener('click', function() {
         let cost = 3000;
         if (playerBalance < cost) {
-            alert('Insufficient funds. Need $' + cost.toLocaleString());
+            showDynoAlert('danger', 'Insufficient funds. Need $' + cost.toLocaleString());
             return;
         }
         fetch('https://fish_remaps/applyTransMode', {
@@ -614,7 +614,7 @@
     document.getElementById('btnApplyGearRatio').addEventListener('click', function() {
         let cost = 5000;
         if (playerBalance < cost) {
-            alert('Insufficient funds. Need $' + cost.toLocaleString());
+            showDynoAlert('danger', 'Insufficient funds. Need $' + cost.toLocaleString());
             return;
         }
         fetch('https://fish_remaps/applyGearRatio', {

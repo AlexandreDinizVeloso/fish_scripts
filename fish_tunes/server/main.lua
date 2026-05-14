@@ -506,9 +506,8 @@ AddEventHandler('fish_tunes:convertDrivetrainServer', function(plate, drivetrain
     tunesDataCache[plate].lastUpdated = os.time()
     SaveTunesDataToFile()
 
-    -- Apply to vehicle
-    exports.fish_tunes:ApplyDrivetrainModifiers(GetVehiclePedIsIn(GetPlayerPed(src), false), drivetrain)
-    exports.fish_tunes:ClearDrivetrainCache(plate)
+    -- Apply to vehicle (client-side)
+    TriggerClientEvent('fish_tunes:applyDrivetrain', src, plate, drivetrain)
 
     TriggerClientEvent('fish_tunes:clientNotify', src, '~g~Drivetrain converted to ' .. drivetrain .. ' ($' .. cost .. ')')
 end)

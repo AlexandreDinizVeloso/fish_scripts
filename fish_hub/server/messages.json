@@ -1,26 +1,26 @@
 [
     {
         "channel": "general",
-        "message": "a",
-        "timestamp": 1778685682,
+        "playerId": 1,
         "id": "msg_1778685682_7705",
+        "timestamp": 1778685682,
         "playerName": "Peixe",
-        "playerId": 1
+        "message": "a"
     },
     {
         "channel": "underground",
-        "message": "a",
-        "timestamp": 1778685684,
+        "playerId": 1,
         "id": "msg_1778685684_6850",
+        "timestamp": 1778685684,
         "playerName": "Peixe",
-        "playerId": 1
+        "message": "a"
     },
     {
         "channel": "marketplace",
-        "message": "a",
-        "timestamp": 1778685686,
+        "playerId": 1,
         "id": "msg_1778685686_2616",
+        "timestamp": 1778685686,
         "playerName": "Peixe",
-        "playerId": 1
+        "message": "a"
     }
 ]

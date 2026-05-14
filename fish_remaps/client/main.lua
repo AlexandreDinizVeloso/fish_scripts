@@ -101,6 +101,15 @@ function OpenRemap()
         currentSubArchetype = existing.currentSubArchetype or currentSubArchetype
     end
 
+    -- Get player balance
+    local balance = 0
+    local success, playerData = pcall(function()
+        return exports.qbx_core:GetPlayerData()
+    end)
+    if success and playerData and playerData.money then
+        balance = (playerData.money.bank or 0) + (playerData.money.cash or 0)
+    end
+
     local sendData = {
         action = 'openRemap',
         vehicleName = displayName,
@@ -115,7 +124,10 @@ function OpenRemap()
         stats = Config.Stats,
         statLabels = Config.StatLabels,
         statColors = Config.StatColors,
-        existingRemap = existing ~= nil
+        existingRemap = existing ~= nil,
+        balance = balance,
+        dynoSettings = existing and existing.dyno or nil,
+        transSettings = existing and { mode = existing.transMode, gearPreset = existing.gearPreset } or nil
     }
 
     SetNuiFocus(true, true)

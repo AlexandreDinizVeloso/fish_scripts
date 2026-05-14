@@ -356,6 +356,16 @@ AddEventHandler('fish_tunes:healthData', function(healthData)
     end
 end)
 
+-- Apply drivetrain from server
+RegisterNetEvent('fish_tunes:applyDrivetrain')
+AddEventHandler('fish_tunes:applyDrivetrain', function(plate, drivetrain)
+    local vehicle = GetCurrentVehicle()
+    if vehicle then
+        exports.fish_tunes:ApplyDrivetrainModifiers(vehicle, drivetrain)
+        exports.fish_tunes:ClearDrivetrainCache(plate)
+    end
+end)
+
 -- ============================================================
 -- Initialization
 -- ============================================================

@@ -1,9 +1,1 @@
-{
-    "general": {
-        "createdAt": 0,
-        "icon": "💬",
-        "type": "general",
-        "members": [],
-        "name": "General"
-    }
-}
+{"general":{"name":"General","type":"general","icon":"💬","members":[],"createdBy":null,"createdAt":0}}
