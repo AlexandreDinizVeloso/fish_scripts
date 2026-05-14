@@ -1,0 +1,44 @@
+Estou montando um servidor de FiveM e quero focar em corridas
+Então a primeira coisa que fiz foi baixar um pack com 500 carros de diferentes criadores
+O problema disso é que existem MUITOS carros overpowered, muitos carros underpowered e muitos carros balanceados
+Então estou querendo montar um sistema de veículos que lidará com todo o mercado, tanto legal quanto ilegal
+Teremos o módulo inicial(fish_normalizer): será responsável por lidar com o sistema de rank dos carros(X, S, A, B, C), onde o X é um rank oculto dado aos carros perfeitos capazes de alcançarem classificação 1000+(deve ser quase impossível), o rank S é dado aos carros com classificação 999 até 900, o rank A é dado aos carros com classificação 750 até 899, o rank B é dado aos carros com classificação 500 até 749, o rank C é dado aos carros com classificação 0 até 499
+Também terá sistema de arquétipos, que é o DNA do carro, seguindo a lista: " Esportivo/Tuner:
+Vantagens: Alta dirigibilidade, bons de curva, grip lateral e força G estáveis, aceleração moderada e leves
+Desvantagens: Velocidade final limitada, muito leves, ruins para bumpar
+
+ Possante/Muscle: Foco em aceleração
+Vantagens: Alta potência em baixa e alta rotação, torque instantâneo, pode bater em alguns carros S na reta e arrancada, altos e ótimos para bumpar
+Desvantagens: Dirigibilidade ruim, ruins de curva e pesados
+
+ Exótico/Luxuoso: Foco em velocidade final
+Vantagens: Carros ótimos para retas longas, aceleração estável e ótima dirigibilidade
+Desvantagens: Instáveis, carros dessa categoria variam muito de um para outro
+
+ Supercarros/Hipercarros: 
+Vantagens: Equilibrados em todos os pontos, sem pontos negativos em excesso
+Desvantagens: Caros e carro de gente fraca
+
+ Motos:
+Vantagens: Leves, pequenas, passam em qualquer beco, alta aceleração e bem manobrável
+Desvantagens: Pode cair em colisões, frágeis
+
+ Utilitários:
+Vantagens: Conseguem carregar muitos itens em seu interior, torque alto para subir elevações
+Desvantagens: Lentos e extremamente pesados
+
+ Especiais:
+Helicopteros, aviões e etc;", e os subarquétipos que é a preparação do carro, então seriam coisas como "drifter, dragster, late surger, curve king, etc", fica a seu critério adicionar mais subarquétipos
+O resultado da normalização deve ser considerado a versão stock dos carros, mas não deve deixar os carros com mesmos status, mudando apenas a 'skin' do carro, É IMPRESCINDIVEL manter a personalidade de cada carro. Então pense bem na estratégia de como normalizar.
+o normalizer deve conter um NUI acessado através do comando /normalize, onde o usuário poderá escolher a classe desejada(menos X, que só será alcançada através de tuning+remap perfeitos e escolha de carro perfeita), arquétipo e subarquétipo
+
+No lado legal deverá ter o módulo de remap(fish_remaps): será responsável por fazer o sistema de ajustes finos do carro, como por exemplo sacrificar pontos de aceleração para dar velocidade final, sistemas de herança de DNA, onde você poderá mudar o arquétipo para outro, mas não 100%, o carro ainda manterá 25% da sua genética original e mudará apenas 75%, ou seja, caso seu carro seja um muscle e mude pra um exótico, você não terá a reta de um exótico, mas ainda terá uma aceleração melhor pois você ainda tem parte dos genes de um muscle, além de poder mudar o subarquétipo(100% pois é apenas preparação), deverá ter outros sistemas a seu critério. Será acessível através de um chip de remap, mas por fins de teste e debug, será inicialmente acessível pelo comando /remap
+
+No lado legal e ilegal deverá ter o módulo de tuning(fish_tunes): será o módulo responsável pela instalação de peças legais e ilegais no carro. Ele será o núcleo do pós balanceamento, onde o maior impacto no desempenho acontece, a mudança de um stock para tuning deverá ser perceptível. Terão vários níveis para cada peça, indo do stock, para os l1 ao l3 no lado legal e l4 e l5 no lado ilegal, que serão peças de overclock, possuindo mais desempenho, mas com drawbacks que mexerão em outras partes do carro como instabilidade, menos resistência e etc, além do sistema de HEAT, que é o quanto o carro possui chance de chamar a atenção da polícia. Será acessível através de um tablet de mecânico, mas por fins de teste e debug, será inicialmente acessível pelo comando /tunes
+
+Terá também um módulo de telemetria(fish_telemetry): será o módulo responsável por registrar e gravar dados do carro. ao segurar a tecla 'K', mostrará a classificação dos carros ao redor, como por exemplo "S: 947". Além disso, caso o usuário esteja na direção do veículo, ele poderá apertar a tecla 'G', ele irá iniciar uma gravação de telemetria, onde ele guardará informações como velocidade atual, velocidade máxima, em quanto tempo faz de 0-100km/h, 0-200km/h, em quanto tempo e distancia que faz o 100-0 e 200-0, força g enquanto possui aderência, tudo isso em duas colunas: melhor e ultima. também deve ser capaz de identificar caso o carro tenha sofrido alterações durante a gravação de telemetria, como por exemplo o usuário inicia a gravação stock, testa, faz tuning, testa, faz remap, testa e encerra a gravação e o sistema deve ser capaz de identificar as 3 versões, separar os resultados de todas as versões e colocar na área de transferência do usuário(ctrl c) os resultados formatados.
+
+E por final deve ter o módulo de hub(fish_hub): módulo responsável por ser a comunidade de customização, onde existira um tablet que você pode instalar dois chips, o chip v1 e v2, onde o v1 dará acesso ao lado legal e o v2 ao lado ilegal. Terá funções como anúncio de peças ilegais, requisição de peças ilegais, anúncio de serviços como instalação de peças e criação de remaps. Deverá ser possível ter chats comunitários, chats individuais, ali ficará o sistema de HEAT, onde poderá ver os seus carros e o nível de HEAT, além de poder ver o ranking de HEAT de todo mundo, poderá ter outras funcionalidades a seu critério. Será acessível através de um tablet, mas por fins de teste e debug, será inicialmente acessível pelo comando /hub
+
+
+Tudo deverá ter sua respectiva NUI, como o remap, tuning, hub, telemetry, estilizado com tema de corrida e tecnologia.
