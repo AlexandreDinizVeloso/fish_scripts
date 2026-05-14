@@ -73,9 +73,63 @@
             $tabContents.forEach(c => c.classList.remove('active'));
             
             tab.classList.add('active');
-            document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+            const tabId = `tab-${tab.dataset.tab}`;
+            document.getElementById(tabId).classList.add('active');
+
+            // When switching to Parts tab, forward parts data to the iframe
+            if (tab.dataset.tab === 'parts') {
+                forwardPartsData();
+            }
+            // When switching to Remap tab, load the remap UI
+            if (tab.dataset.tab === 'remap') {
+                loadRemapFrame();
+            }
         });
     });
+
+    // ── Parts Tab: Forward data to embedded tunes iframe ───────────────
+    function forwardPartsData() {
+        const frame = document.getElementById('partsFrame');
+        if (!frame || !frame.contentWindow) return;
+        
+        // Send the parts data to the tunes iframe
+        frame.contentWindow.postMessage({
+            action: 'openTunes',
+            vehicleName: document.getElementById('vehicleName').textContent,
+            plate: state.plate,
+            categories: state.categories || [],
+            currentParts: state.currentParts || {},
+            totalBonuses: state.totalBonuses || {},
+            currentHeat: state.currentHeat || 0,
+            maxHeat: state.maxHeat || 100,
+            partLevels: state.partLevels || {}
+        }, '*');
+    }
+
+    // ── Remap Tab: Load remap UI ───────────────────────────────────────
+    let remapLoaded = false;
+    function loadRemapFrame() {
+        const frame = document.getElementById('remapFrame');
+        if (!frame) return;
+        
+        if (!remapLoaded) {
+            // Set the src to the remap HTML (cross-resource URL)
+            // Use the fish_remaps resource path
+            frame.src = 'nui://fish_remaps/html/index.html';
+            remapLoaded = true;
+        }
+        
+        // Forward remap open event after a short delay for the frame to load
+        setTimeout(() => {
+            if (frame.contentWindow) {
+                frame.contentWindow.postMessage({
+                    action: 'openRemap',
+                    vehicleName: document.getElementById('vehicleName').textContent,
+                    plate: state.plate
+                }, '*');
+            }
+        }, 500);
+    }
 
     // ── Dyno Logic ─────────────────────────────────────────────────────
     function updateDynoPreview() {
@@ -282,6 +336,23 @@
             
             if (data.recipes) {
                 renderCrafting(data.recipes);
+            }
+
+            // Store parts data for Parts tab
+            if (data.categories) {
+                state.categories = data.categories;
+                state.currentParts = data.currentParts || {};
+                state.totalBonuses = data.totalBonuses || {};
+                state.currentHeat = data.currentHeat || 0;
+                state.maxHeat = data.maxHeat || 100;
+                state.partLevels = data.partLevels || {};
+            }
+
+            // Update heat display
+            if (state.currentHeat !== undefined) {
+                const heatPct = state.maxHeat > 0 ? (state.currentHeat / state.maxHeat) * 100 : 0;
+                const heatFill = document.getElementById('heatFill');
+                if (heatFill) heatFill.style.width = heatPct + '%';
             }
 
             $app.classList.remove('hidden');

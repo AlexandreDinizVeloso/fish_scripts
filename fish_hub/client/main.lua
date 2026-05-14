@@ -316,6 +316,13 @@ RegisterNUICallback('toggleService', function(data, cb)
     cb({ success = true })
 end)
 
+RegisterNUICallback('openTuning', function(data, cb)
+    -- Trigger the tunes dashboard to open from the hub
+    -- The tunes dashboard iframe will receive data via its own event system
+    TriggerEvent('fish_tunes:requestDashboardWithRemap')
+    cb({ success = true })
+end)
+
 -- ============================================================
 -- Server Event Handlers
 -- ============================================================

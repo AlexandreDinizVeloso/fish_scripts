@@ -140,6 +140,31 @@
         if (target) target.classList.add('active');
         const nav = document.querySelector(`.nav-item[data-view="${viewName}"]`);
         if (nav) nav.classList.add('active');
+
+        // Load tuning dashboard when switching to tuning view
+        if (viewName === 'tuning') {
+            loadTuningFrame();
+        }
+    }
+
+    // ── Tuning Dashboard Integration ──────────────────────────────────
+    let tuningLoaded = false;
+    function loadTuningFrame() {
+        const frame = document.getElementById('tuningFrame');
+        if (!frame) return;
+
+        if (!tuningLoaded) {
+            // Load the tunes dashboard from fish_tunes resource
+            frame.src = 'nui://fish_tunes/html/dashboard.html';
+            tuningLoaded = true;
+        }
+
+        // Request the tunes data via NUI callback
+        fetch('https://fish_hub/openTuning', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
     }
 
     // ============================================================

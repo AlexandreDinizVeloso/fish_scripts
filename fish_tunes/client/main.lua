@@ -96,63 +96,9 @@ function OpenTunes()
 
     currentVehicle = vehicle
     local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
-    local model = GetEntityModel(vehicle)
-    local displayName = GetDisplayNameFromVehicleModel(model)
-
-    local currentParts = {}
-    if tunesData[plate] and tunesData[plate].parts then
-        currentParts = tunesData[plate].parts
-    end
-
-    -- Build parts data with bonuses
-    local partsDisplay = {}
-    for _, cat in ipairs(Config.PartCategories) do
-        local currentLevel = currentParts[cat.key] or 'stock'
-        local bonuses = Config.PartBonuses[cat.key] or {}
-        local levelsDisplay = {}
-
-        for levelKey, levelInfo in pairs(Config.PartLevels) do
-            local bonus = bonuses[levelKey] or {}
-            table.insert(levelsDisplay, {
-                key = levelKey,
-                label = levelInfo.label,
-                icon = levelInfo.icon,
-                color = levelInfo.color,
-                legal = levelInfo.legal,
-                heat = levelInfo.heat,
-                bonuses = bonus,
-                selected = (levelKey == currentLevel)
-            })
-        end
-
-        table.insert(partsDisplay, {
-            key = cat.key,
-            label = cat.label,
-            icon = cat.icon,
-            description = cat.description,
-            currentLevel = currentLevel,
-            levels = levelsDisplay
-        })
-    end
-
-    -- Calculate current totals
-    local tunes = GetVehicleTunes(vehicle)
-
-    local sendData = {
-        action = 'openTunes',
-        vehicleName = displayName,
-        plate = plate,
-        categories = partsDisplay,
-        currentParts = currentParts,
-        totalBonuses = tunes and tunes.bonuses or { top_speed = 0, acceleration = 0, handling = 0, braking = 0 },
-        currentHeat = tunes and tunes.heat or 0,
-        maxHeat = Config.MaxHeat,
-        partLevels = Config.PartLevels
-    }
-
-    SetNuiFocus(true, true)
-    SendNUIMessage(sendData)
-    isNuiOpen = true
+    
+    -- Request advanced data from server (opens the full dashboard)
+    TriggerServerEvent('fish_tunes:requestAdvancedData', plate)
 end
 
 RegisterCommand('tunes', function()
@@ -185,6 +131,37 @@ AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, 
     local model = GetEntityModel(vehicle)
     local displayName = GetDisplayNameFromVehicleModel(model)
 
+    -- Build parts data for Parts tab
+    local currentParts = tunesData[plate] and tunesData[plate].parts or {}
+    local partsDisplay = {}
+    for _, cat in ipairs(Config.PartCategories) do
+        local currentLevel = currentParts[cat.key] or 'stock'
+        local bonuses = Config.PartBonuses[cat.key] or {}
+        local levelsDisplay = {}
+        for levelKey, levelInfo in pairs(Config.PartLevels) do
+            local bonus = bonuses[levelKey] or {}
+            table.insert(levelsDisplay, {
+                key = levelKey,
+                label = levelInfo.label,
+                icon = levelInfo.icon,
+                color = levelInfo.color,
+                legal = levelInfo.legal,
+                heat = levelInfo.heat,
+                bonuses = bonus,
+                selected = (levelKey == currentLevel)
+            })
+        end
+        table.insert(partsDisplay, {
+            key = cat.key,
+            label = cat.label,
+            icon = cat.icon,
+            description = cat.description,
+            currentLevel = currentLevel,
+            levels = levelsDisplay
+        })
+    end
+    local tunes = GetVehicleTunes(vehicle)
+
     local sendData = {
         action = 'openAdvancedTunes',
         vehicleName = displayName,
@@ -192,7 +169,14 @@ AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, 
         dyno = dynoData,
         drivetrain = dtData,
         engines = engines,
-        recipes = recipes
+        recipes = recipes,
+        -- Parts data for the integrated Parts tab
+        categories = partsDisplay,
+        currentParts = currentParts,
+        totalBonuses = tunes and tunes.bonuses or { top_speed = 0, acceleration = 0, handling = 0, braking = 0 },
+        currentHeat = tunes and tunes.heat or 0,
+        maxHeat = Config.MaxHeat,
+        partLevels = Config.PartLevels
     }
 
     SetNuiFocus(true, true)
@@ -266,6 +250,22 @@ RegisterNUICallback('setTransmissionMode', function(data, cb)
     
     TriggerServerEvent('fish_tunes:setTransmissionModeServer', plate, data.mode)
     cb({success = true})
+end)
+
+-- ============================================================
+-- Remap integration: Open dashboard with remap tab
+-- ============================================================
+RegisterNetEvent('fish_tunes:requestDashboardWithRemap')
+AddEventHandler('fish_tunes:requestDashboardWithRemap', function()
+    local vehicle = GetCurrentVehicle()
+    if not vehicle then
+        ShowNotification('~r~You must be in a vehicle.')
+        return
+    end
+    currentVehicle = vehicle
+    local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
+    -- Request advanced data; dashboard will open with remap tab
+    TriggerServerEvent('fish_tunes:requestAdvancedData', plate)
 end)
 
 RegisterNUICallback('setGearRatio', function(data, cb)

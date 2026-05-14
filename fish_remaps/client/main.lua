@@ -126,7 +126,8 @@ end
 -- Register command
 RegisterCommand('remap', function()
     if isNuiOpen then return end
-    OpenRemap()
+    -- Open the tunes dashboard with remap tab
+    TriggerEvent('fish_tunes:requestDashboardWithRemap')
 end, false)
 
 -- NUI Callbacks
