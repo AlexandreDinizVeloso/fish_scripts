@@ -18,5 +18,15 @@
             "installedAt": 1778775469,
             "type": "v2"
         }
+    ],
+    "4": [
+        {
+            "type": "v1",
+            "installedAt": 1778780589
+        },
+        {
+            "type": "v2",
+            "installedAt": 1778780590
+        }
     ]
 }
