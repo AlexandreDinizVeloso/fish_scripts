@@ -110,6 +110,16 @@ Config.PartCosts = {
 -- Drivetrain conversion cost
 Config.DrivetrainCost = 5000
 
+-- ============================================================
+-- Drivetrain Conversion (affects fDriveBiasFront)
+-- ============================================================
+
+Config.DrivetrainModes = {
+    FWD = { label = 'Front Wheel Drive', value = 1.0, item = 'frontwheeldrive' },
+    AWD = { label = 'All Wheel Drive',   value = 0.5, item = 'allwheeldrive' },
+    RWD = { label = 'Rear Wheel Drive',  value = 0.0, item = 'rearwheeldrive' },
+}
+
 -- Class swap costs: from_to = cost
 -- Going up costs more, going down costs less
 Config.ClassSwapCosts = {
@@ -410,3 +420,238 @@ Config.DynoTuning = {
     final_drive_range = {min = 1.5, max = 4.5},
     boost_pressure_range = {min = 0, max = 30}
 }
+
+-- ============================================================
+-- Tire Compound System
+-- Each compound affects traction handling differently and has
+-- its own degradation rate per km driven.
+-- ============================================================
+
+Config.TireCompounds = {
+    street = {
+        label = 'Street',
+        icon = '🔘',
+        description = 'Standard street tires. Balanced grip and longevity.',
+        degrade = 0.01,  -- % per km driven
+        handling = {
+            fTractionCurveMax    = 1.00,
+            fTractionCurveMin    = 1.00,
+            fTractionCurveLateral = 1.00,
+            fLowSpeedTractionLossMult = 1.00,
+            fTractionLossMult    = 1.00,
+        },
+        cost = 1000,
+    },
+    sports = {
+        label = 'Sports',
+        icon = '🏁',
+        description = 'Sport compound. Better grip, wears faster.',
+        degrade = 0.02,
+        handling = {
+            fTractionCurveMax    = 1.10,
+            fTractionCurveMin    = 1.08,
+            fTractionCurveLateral = 0.95,
+            fLowSpeedTractionLossMult = 0.90,
+            fTractionLossMult    = 0.90,
+        },
+        cost = 3000,
+    },
+    racing = {
+        label = 'Racing',
+        icon = '🔴',
+        description = 'Race compound. Maximum grip, wears quickly.',
+        degrade = 0.04,
+        handling = {
+            fTractionCurveMax    = 1.25,
+            fTractionCurveMin    = 1.20,
+            fTractionCurveLateral = 0.85,
+            fLowSpeedTractionLossMult = 0.70,
+            fTractionLossMult    = 0.70,
+        },
+        cost = 8000,
+    },
+    drag = {
+        label = 'Drag',
+        icon = '🚀',
+        description = 'Drag compound. Extreme straight-line grip, poor lateral.',
+        degrade = 0.10,
+        handling = {
+            fTractionCurveMax    = 1.30,
+            fTractionCurveMin    = 1.40,   -- excellent accel grip
+            fTractionCurveLateral = 1.40,  -- poor lateral
+            fLowSpeedTractionLossMult = 0.50,  -- lots of wheelspin
+            fTractionLossMult    = 0.60,
+        },
+        cost = 5000,
+    },
+    drift = {
+        label = 'Drift',
+        icon = '🌪️',
+        description = 'Drift compound. Intentionally low grip for slides.',
+        degrade = 0.15,
+        handling = {
+            fTractionCurveMax    = 0.80,
+            fTractionCurveMin    = 0.75,
+            fTractionCurveLateral = 1.20,
+            fLowSpeedTractionLossMult = 1.20,
+            fTractionLossMult    = 1.30,
+        },
+        cost = 2000,
+    },
+}
+
+-- ============================================================
+-- Vehicle Flags (Advanced Handling)
+-- Each flag modifies CCarHandlingData or CHandlingData flags.
+-- Applied as bitmask values via strAdvancedFlags/strHandlingFlags.
+-- ============================================================
+
+Config.VehicleFlags = {
+    lsd_front = {
+        label = 'Limited Slip Differential (Front)',
+        icon = '⚙️',
+        description = 'Transfers torque from slipping front wheel to the one with grip.',
+        type = 'CCarHandlingData',
+        flag = 'strAdvancedFlags',
+        value = {0, 3},
+        cost = 15000,
+    },
+    lsd_rear = {
+        label = 'Limited Slip Differential (Rear)',
+        icon = '⚙️',
+        description = 'Transfers torque from slipping rear wheel to the one with grip.',
+        type = 'CCarHandlingData',
+        flag = 'strAdvancedFlags',
+        value = {1, 4},
+        cost = 15000,
+    },
+    tcs = {
+        label = 'Traction Control System',
+        icon = '🛡️',
+        description = 'Reduces wheel spin under acceleration.',
+        type = 'CCarHandlingData',
+        flag = 'strAdvancedFlags',
+        value = {13},
+        cost = 20000,
+    },
+    esc = {
+        label = 'Stability Control System',
+        icon = '🔒',
+        description = 'Helps maintain vehicle stability in corners.',
+        type = 'CCarHandlingData',
+        flag = 'strAdvancedFlags',
+        value = {14},
+        cost = 20000,
+    },
+    abs = {
+        label = 'Anti-lock Braking',
+        icon = '🛑',
+        description = 'Prevents wheel lockup during hard braking.',
+        type = 'CHandlingData',
+        flag = 'strModelFlags',
+        value = {4},
+        cost = 18000,
+    },
+    close_ratio = {
+        label = 'Close Ratio Gears',
+        icon = '🔄',
+        description = 'Tighter gear ratios for faster acceleration.',
+        type = 'CCarHandlingData',
+        flag = 'strAdvancedFlags',
+        value = {21},
+        cost = 25000,
+    },
+    kers = {
+        label = 'KERS (Kinetic Energy Recovery)',
+        icon = '⚡',
+        description = 'Stores braking energy for boost on demand.',
+        type = 'CHandlingData',
+        flag = 'strHandlingFlags',
+        value = {2},
+        cost = 50000,
+    },
+    stanced = {
+        label = 'Stanced',
+        icon = '📐',
+        description = 'Aggressive camber for show. Slightly reduces straight-line grip.',
+        type = 'CCarHandlingData',
+        flag = 'strAdvancedFlags',
+        value = {15, 26},
+        cost = 5000,
+    },
+}
+
+-- ============================================================
+-- ECU Tuning Parameters
+-- Affects handling via multiplicative adjustments.
+-- ============================================================
+
+Config.ECUTuning = {
+    ignition_timing = {
+        label = 'Ignition Timing',
+        icon = '🔥',
+        description = 'Advance/retard ignition. Affects torque curve.',
+        min = -0.5,
+        max = 1.5,
+        step = 0.001,
+        default = 1.0,
+        affects = { 'fDriveInertia', 'fInitialDriveForce' },
+    },
+    fuel_table = {
+        label = 'Fuel Table',
+        icon = '⛽',
+        description = 'Air/fuel ratio adjustment. Rich = more power, lean = more heat.',
+        min = -0.5,
+        max = 1.5,
+        step = 0.001,
+        default = 1.0,
+        affects = { 'fInitialDriveForce' },
+    },
+    gear_response = {
+        label = 'Gear Response',
+        icon = '🔄',
+        description = 'Shift speed. Faster = less power loss between gears.',
+        min = -0.5,
+        max = 1.5,
+        step = 0.01,
+        default = 1.0,
+        affects = { 'fClutchChangeRateScaleUpShift', 'fClutchChangeRateScaleDownShift' },
+    },
+    final_drive = {
+        label = 'Final Drive',
+        icon = '🎯',
+        description = 'Final drive ratio. Lower = more top speed, higher = more acceleration.',
+        min = -0.5,
+        max = 1.5,
+        step = 0.01,
+        default = 1.0,
+        affects = { 'fInitialDriveMaxFlatVel', 'fInitialDriveForce' },
+    },
+}
+
+-- ============================================================
+-- Gear Ratio Presets
+-- ============================================================
+
+Config.GearRatioPresets = {
+    stock = { label = 'Stock', accel = 0, speed = 0, cost = 0 },
+    short = { label = 'Short', accel = 15, speed = -10, cost = 5000 },
+    long  = { label = 'Long',  accel = -10, speed = 15, cost = 5000 },
+    drag  = { label = 'Drag',  accel = 25, speed = -20, cost = 8000 },
+    drift = { label = 'Drift', accel = 10, speed = -5, cost = 4000 },
+}
+
+-- ============================================================
+-- Turbo Per-Gear Boost System
+-- Enables different boost pressure per gear.
+-- ============================================================
+
+Config.TurboPerGear = {
+    enabled = true,
+    default_pressure = 1.0,
+    min = 0.5,
+    max = 1.5,
+    step = 0.01,
+}
+
+Config.GearRatioCost = 5000

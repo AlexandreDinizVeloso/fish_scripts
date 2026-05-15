@@ -2,12 +2,23 @@ fx_version 'cerulean'
 game 'gta5'
 
 name 'fish_remaps'
-description 'Vehicle Remap System - DNA Inheritance & Stat Tuning'
+description 'Vehicle Remap System — DNA Inheritance & ECU Tuning'
 author 'Fish Vehicles'
-version '1.0.0'
+version '2.0.0'
+
+dependencies {
+    'oxmysql',
+    'qbx_core',
+    'fish_normalizer'
+}
 
 shared_scripts {
     'config.lua'
+}
+
+server_scripts {
+    '@oxmysql/lib/MySQL.lua',
+    'server/main.lua'
 }
 
 client_scripts {
@@ -15,31 +26,18 @@ client_scripts {
     'client/nui.lua'
 }
 
-server_scripts {
-    'server/main.lua',
-    'server/data.lua'
-}
-
 ui_page 'html/index.html'
 
 files {
     'html/index.html',
     'html/style.css',
-    'html/script.js',
-    'html/assets/*'
-}
-
-dependencies {
-    'fish_normalizer'
+    'html/script.js'
 }
 
 exports {
-    'GetVehicleRemapData',
-    'HasRemap',
-    'GetDNAInheritance'
+    'GetVehicleRemapData'
 }
 
 server_exports {
-    'GetVehicleRemapDataServer',
-    'SaveRemapData'
+    'GetVehicleRemapDataServer'
 }

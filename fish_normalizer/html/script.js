@@ -1,366 +1,186 @@
-// Fish Normalizer - NUI Script
-(function() {
-    'use strict';
+'use strict';
+// fish_normalizer NUI script
 
-    const app = document.getElementById('app');
-    const vehicleNameEl = document.getElementById('vehicleName');
-    const plateEl = document.getElementById('plateDisplay');
-    const scoreValueEl = document.getElementById('scoreValue');
-    const scoreRingFill = document.getElementById('scoreRingFill');
-    const rankBadgeEl = document.getElementById('rankBadge');
-    const archetypeGrid = document.getElementById('archetypeGrid');
-    const subArchGrid = document.getElementById('subArchGrid');
-    const btnClose = document.getElementById('btnClose');
-    const btnConfirm = document.getElementById('btnConfirm');
-    const archetypeDetail = document.getElementById('archetypeDetail');
+let nData = {
+  plate: '',
+  vehicleNetId: 0,
+  archetype: 'esportivo',
+  subArchetype: null,
+  rank: 'C',
+  score: 0,
+  stats: {},
+  config: null,
+};
 
-    let currentData = null;
-    let selectedArchetype = null;
-    let selectedSubArchetype = null;
+const ARCHETYPES = [
+  { key:'esportivo', label:'Esportivo', icon:'🏎️', desc:'Grip & Corners' },
+  { key:'possante',  label:'Possante',  icon:'💪', desc:'Raw Power' },
+  { key:'exotico',   label:'Exótico',   icon:'🚀', desc:'Top Speed' },
+  { key:'supercarro',label:'Supercarro',icon:'⚡', desc:'All-Around' },
+  { key:'moto',      label:'Moto',      icon:'🏍️', desc:'Ultra-Light' },
+  { key:'utilitario',label:'Utilitário',icon:'🚛', desc:'Work Horse' },
+  { key:'especial',  label:'Especial',  icon:'🌟', desc:'Unique' },
+];
 
-    // Rank colors map
-    const rankColors = {
-        'C': '#8B8B8B',
-        'B': '#4FC3F7',
-        'A': '#66BB6A',
-        'S': '#FFD54F',
-        'X': '#FF1744'
+const SUB_ARCHETYPES = [
+  'drifter','dragster','late_surger','curve_king','grip_master',
+  'street_racer','rally_spec','drift_king','time_attack','sleeper'
+];
+
+const RANKS = [
+  { name:'C', color:'#607d8b', bg:'rgba(96,125,139,0.12)' },
+  { name:'B', color:'#4caf50', bg:'rgba(76,175,80,0.12)' },
+  { name:'A', color:'#ff9800', bg:'rgba(255,152,0,0.12)' },
+  { name:'S', color:'#e91e63', bg:'rgba(233,30,99,0.12)' },
+];
+
+function buildArchetypeGrid() {
+  const grid = document.getElementById('archetypeGrid');
+  grid.innerHTML = '';
+  ARCHETYPES.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'arch-card' + (nData.archetype === a.key ? ' selected' : '');
+    card.innerHTML = `<div class="icon">${a.icon}</div><div class="name">${a.label}</div><div class="desc">${a.desc}</div>`;
+    card.onclick = () => {
+      nData.archetype = a.key;
+      buildArchetypeGrid();
+      recalcScore();
     };
+    grid.appendChild(card);
+  });
+}
 
-    // Listen for messages from Lua
-    window.addEventListener('message', function(event) {
-        const data = event.data;
+function buildSubGrid() {
+  const grid = document.getElementById('subGrid');
+  grid.innerHTML = '';
+  // None option
+  const none = document.createElement('div');
+  none.className = 'sub-card' + (!nData.subArchetype ? ' selected' : '');
+  none.textContent = 'None';
+  none.onclick = () => { nData.subArchetype = null; buildSubGrid(); };
+  grid.appendChild(none);
 
-        if (data.action === 'openNormalizer') {
-            openNormalizer(data);
-        }
-    });
+  SUB_ARCHETYPES.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'sub-card' + (nData.subArchetype === s ? ' selected' : '');
+    card.textContent = s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    card.onclick = () => { nData.subArchetype = s; buildSubGrid(); };
+    grid.appendChild(card);
+  });
+}
 
-    // Open normalizer
-    function openNormalizer(data) {
-        currentData = data;
-        selectedArchetype = data.currentArchetype;
-        selectedSubArchetype = data.currentSubArchetype;
+function buildRankSelector() {
+  const sel = document.getElementById('rankSelector');
+  sel.innerHTML = '';
+  RANKS.forEach(r => {
+    const btn = document.createElement('div');
+    const isSel = nData.rank === r.name;
+    btn.className = 'rank-btn' + (isSel ? ' sel-' + r.name : '');
+    btn.textContent = r.name;
+    btn.style.borderColor = isSel ? r.color : '';
+    btn.onclick = () => { nData.rank = r.name; buildRankSelector(); updateRankBadge(); };
+    sel.appendChild(btn);
+  });
+}
 
-        vehicleNameEl.textContent = data.vehicleName || 'UNKNOWN';
-        plateEl.textContent = 'PLATE: ' + (data.plate || 'N/A');
+function updateRankBadge() {
+  const badge = document.getElementById('rankBadge');
+  const r = RANKS.find(x => x.name === nData.rank) || RANKS[0];
+  badge.textContent = nData.rank;
+  badge.style.borderColor = r.color;
+  badge.style.color = r.color;
+  badge.style.background = r.bg;
+}
 
-        // Build archetype cards
-        buildArchetypeCards(data.archetypes);
-        buildSubArchetypeCards(data.subArchetypes);
+function buildStatsPanel() {
+  const panel = document.getElementById('statsPanel');
+  const stats = nData.stats || {};
+  const entries = [
+    { key:'top_speed',    label:'Top Speed',    max:340 },
+    { key:'acceleration', label:'Acceleration', max:100 },
+    { key:'handling',     label:'Handling',     max:100 },
+    { key:'braking',      label:'Braking',      max:100 },
+  ];
+  panel.innerHTML = entries.map(e => {
+    const val = stats[e.key] || 0;
+    const pct = Math.min(val / e.max * 100, 100);
+    return `<div class="stat-row">
+      <div>
+        <div style="display:flex;justify-content:space-between">
+          <span class="stat-label">${e.label}</span>
+          <span class="stat-val">${val.toFixed ? val.toFixed(0) : val}</span>
+        </div>
+        <div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
-        // Update stats
-        updateStats(data.stats, data.baseScore);
+function recalcScore() {
+  // Simple preview: sum of weighted stats with archetype modifier
+  const stats = nData.stats || {};
+  const topSpeed = stats.top_speed || 0;
+  const accel    = stats.acceleration || 0;
+  const handling = stats.handling || 0;
+  const braking  = stats.braking || 0;
+  const base = (topSpeed * 0.35) + (accel * 0.25) + (handling * 0.25) + (braking * 0.15);
+  nData.score = Math.min(999, Math.round(base));
+  document.getElementById('scorePreview').textContent = nData.score;
+}
 
-        app.classList.remove('hidden');
+function saveNormalization() {
+  fetch('https://fish_normalizer/saveData', {
+    method: 'POST',
+    body: JSON.stringify({
+      plate:        nData.plate,
+      vehicleNetId: nData.vehicleNetId,
+      archetype:    nData.archetype,
+      subArchetype: nData.subArchetype,
+      rank:         nData.rank,
+      score:        nData.score,
+      normalized:   true,
+    })
+  });
+  closeNUI();
+}
 
-        // Notify Lua that NUI is ready
-        fetch('https://fish_normalizer/nuiReady', { method: 'POST' });
-    }
+function closeNUI() {
+  fetch('https://fish_normalizer/close', { method:'POST', body:'{}' });
+  document.body.classList.remove('visible');
+}
 
-    // Build archetype cards
-    function buildArchetypeCards(archetypes) {
-        archetypeGrid.innerHTML = '';
-        archetypes.forEach(function(arch) {
-            const card = document.createElement('div');
-            card.className = 'arch-card' + (arch.key === selectedArchetype ? ' selected' : '');
-            card.dataset.key = arch.key;
-            card.innerHTML =
-                '<div class="arch-card-icon">' + arch.icon + '</div>' +
-                '<div class="arch-card-name">' + arch.label + '</div>' +
-                '<div class="arch-card-desc">' + arch.description + '</div>';
+window.addEventListener('message', e => {
+  const msg = e.data;
+  if (!msg || !msg.action) return;
 
-            card.addEventListener('click', function() {
-                selectArchetype(arch.key);
-            });
+  if (msg.action === 'openNormalizer') {
+    nData.plate        = msg.plate || '';
+    nData.vehicleNetId = msg.vehicleNetId || 0;
+    nData.archetype    = (msg.existing && msg.existing.archetype) || 'esportivo';
+    nData.subArchetype = (msg.existing && msg.existing.sub_archetype) || null;
+    nData.rank         = (msg.existing && msg.existing.rank) || 'C';
+    nData.score        = (msg.existing && msg.existing.score) || 0;
+    nData.stats        = (msg.existing && msg.existing.stats) || {};
 
-            card.addEventListener('mouseenter', function() {
-                showArchetypeDetail(arch);
-            });
+    document.getElementById('vehName').textContent  = msg.vehicleName || '—';
+    document.getElementById('vehPlate').textContent = nData.plate || '———————';
+    document.getElementById('scorePreview').textContent = nData.score;
 
-            card.addEventListener('mouseleave', function() {
-                hideArchetypeDetail();
-            });
+    buildArchetypeGrid();
+    buildSubGrid();
+    buildRankSelector();
+    buildStatsPanel();
+    updateRankBadge();
+    document.body.classList.add('visible');
+  }
 
-            archetypeGrid.appendChild(card);
-        });
-    }
+  if (msg.action === 'updateStats') {
+    nData.stats = msg.stats || {};
+    buildStatsPanel();
+    recalcScore();
+  }
+});
 
-    // Build sub-archetype cards
-    function buildSubArchetypeCards(subArchetypes) {
-        subArchGrid.innerHTML = '';
-        subArchetypes.forEach(function(sub) {
-            const card = document.createElement('div');
-            card.className = 'subarch-card' + (sub.key === selectedSubArchetype ? ' selected' : '');
-            card.dataset.key = sub.key;
-
-            let bonusText = '';
-            if (sub.statBonus) {
-                const bonuses = [];
-                for (const [stat, val] of Object.entries(sub.statBonus)) {
-                    bonuses.push((val > 0 ? '+' : '') + val + ' ' + stat.replace('_', ' '));
-                }
-                bonusText = bonuses.join(', ');
-            }
-
-            card.innerHTML =
-                '<div class="subarch-icon">' + sub.icon + '</div>' +
-                '<div class="subarch-name">' + sub.label + '</div>' +
-                (bonusText ? '<div class="subarch-bonus">' + bonusText + '</div>' : '');
-
-            card.addEventListener('click', function() {
-                selectSubArchetype(sub.key);
-            });
-
-            subArchGrid.appendChild(card);
-        });
-    }
-
-    // Select archetype
-    function selectArchetype(key) {
-        selectedArchetype = key;
-
-        // Update UI
-        document.querySelectorAll('.arch-card').forEach(function(card) {
-            card.classList.toggle('selected', card.dataset.key === key);
-        });
-
-        // Request recalculation from Lua
-        fetch('https://fish_normalizer/selectArchetype', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ archetype: key })
-        }).then(function(resp) { return resp.json(); })
-          .then(function(result) {
-              if (result && typeof result === 'string') {
-                  result = JSON.parse(result);
-              }
-              if (result) {
-                  updateStats(result.stats, result.score);
-              }
-          });
-    }
-
-    // Select sub-archetype
-    function selectSubArchetype(key) {
-        selectedSubArchetype = key;
-
-        document.querySelectorAll('.subarch-card').forEach(function(card) {
-            card.classList.toggle('selected', card.dataset.key === key);
-        });
-
-        fetch('https://fish_normalizer/selectSubArchetype', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subArchetype: key })
-        }).then(function(resp) { return resp.json(); })
-          .then(function(result) {
-              if (result && typeof result === 'string') {
-                  result = JSON.parse(result);
-              }
-              if (result) {
-                  updateStats(result.stats, result.score);
-              }
-          });
-    }
-
-    // Update stats display
-    function updateStats(stats, score) {
-        if (!stats) return;
-
-        const scoreClamped = Math.max(0, Math.min(1000, score || 0));
-
-        // Update score ring
-        const circumference = 2 * Math.PI * 54;
-        const offset = circumference - (scoreClamped / 1000) * circumference;
-        scoreRingFill.style.strokeDashoffset = offset;
-
-        // Update score value
-        scoreValueEl.textContent = scoreClamped;
-
-        // Update rank
-        let rank = 'C';
-        let rankColor = '#8B8B8B';
-        if (scoreClamped >= 1000) { rank = 'X'; rankColor = '#FF1744'; }
-        else if (scoreClamped >= 900) { rank = 'S'; rankColor = '#FFD54F'; }
-        else if (scoreClamped >= 750) { rank = 'A'; rankColor = '#66BB6A'; }
-        else if (scoreClamped >= 500) { rank = 'B'; rankColor = '#4FC3F7'; }
-
-        rankBadgeEl.textContent = rank;
-        rankBadgeEl.style.color = rankColor;
-        rankBadgeEl.style.textShadow = '0 0 20px ' + rankColor + '80';
-        scoreRingFill.style.stroke = rankColor;
-
-        // Update stat bars
-        const topSpeed = stats.top_speed || 0;
-        const accel = stats.acceleration || 0;
-        const handling = stats.handling || 0;
-        const braking = stats.braking || 0;
-
-        document.getElementById('barTopSpeed').style.width = topSpeed + '%';
-        document.getElementById('valTopSpeed').textContent = Math.round(topSpeed);
-        document.getElementById('barAccel').style.width = accel + '%';
-        document.getElementById('valAccel').textContent = Math.round(accel);
-        document.getElementById('barHandling').style.width = handling + '%';
-        document.getElementById('valHandling').textContent = Math.round(handling);
-        document.getElementById('barBraking').style.width = braking + '%';
-        document.getElementById('valBraking').textContent = Math.round(braking);
-
-        // Update radar chart
-        drawRadarChart(topSpeed, accel, handling, braking);
-    }
-
-    // Draw radar chart
-    function drawRadarChart(topSpeed, accel, handling, braking) {
-        const canvas = document.getElementById('radarChart');
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
-        const cx = w / 2;
-        const cy = h / 2;
-        const radius = Math.min(cx, cy) - 30;
-
-        ctx.clearRect(0, 0, w, h);
-
-        const labels = ['TOP SPD', 'ACCEL', 'HANDLING', 'BRAKING'];
-        const values = [topSpeed / 100, accel / 100, handling / 100, braking / 100];
-        const numAxes = 4;
-        const angleStep = (Math.PI * 2) / numAxes;
-
-        // Draw grid circles
-        for (let i = 1; i <= 4; i++) {
-            const r = (radius / 4) * i;
-            ctx.beginPath();
-            for (let j = 0; j <= numAxes; j++) {
-                const angle = j * angleStep - Math.PI / 2;
-                const x = cx + Math.cos(angle) * r;
-                const y = cy + Math.sin(angle) * r;
-                if (j === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.closePath();
-            ctx.strokeStyle = 'rgba(0, 212, 255, 0.1)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        }
-
-        // Draw axes
-        for (let i = 0; i < numAxes; i++) {
-            const angle = i * angleStep - Math.PI / 2;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
-            ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // Labels
-            const labelR = radius + 18;
-            const lx = cx + Math.cos(angle) * labelR;
-            const ly = cy + Math.sin(angle) * labelR;
-            ctx.fillStyle = '#8888aa';
-            ctx.font = '9px Orbitron';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(labels[i], lx, ly);
-        }
-
-        // Draw data polygon
-        ctx.beginPath();
-        for (let i = 0; i <= numAxes; i++) {
-            const idx = i % numAxes;
-            const angle = idx * angleStep - Math.PI / 2;
-            const val = Math.max(0.05, Math.min(1, values[idx]));
-            const x = cx + Math.cos(angle) * radius * val;
-            const y = cy + Math.sin(angle) * radius * val;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(0, 212, 255, 0.15)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(0, 212, 255, 0.8)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Draw data points
-        for (let i = 0; i < numAxes; i++) {
-            const angle = i * angleStep - Math.PI / 2;
-            const val = Math.max(0.05, Math.min(1, values[i]));
-            const x = cx + Math.cos(angle) * radius * val;
-            const y = cy + Math.sin(angle) * radius * val;
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#00d4ff';
-            ctx.fill();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        }
-    }
-
-    // Show archetype detail
-    function showArchetypeDetail(arch) {
-        document.getElementById('detailIcon').textContent = arch.icon;
-        document.getElementById('detailTitle').textContent = arch.label;
-        document.getElementById('detailDesc').textContent = arch.description;
-
-        const prosList = document.getElementById('detailPros');
-        const consList = document.getElementById('detailCons');
-        prosList.innerHTML = '';
-        consList.innerHTML = '';
-
-        arch.pros.forEach(function(p) {
-            const li = document.createElement('li');
-            li.textContent = p;
-            prosList.appendChild(li);
-        });
-
-        arch.cons.forEach(function(c) {
-            const li = document.createElement('li');
-            li.textContent = c;
-            consList.appendChild(li);
-        });
-
-        archetypeDetail.classList.remove('hidden');
-    }
-
-    // Hide archetype detail
-    function hideArchetypeDetail() {
-        archetypeDetail.classList.add('hidden');
-    }
-
-    // Close button
-    btnClose.addEventListener('click', function() {
-        closeNui();
-    });
-
-    // Confirm button
-    btnConfirm.addEventListener('click', function() {
-        fetch('https://fish_normalizer/confirmNormalization', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                archetype: selectedArchetype,
-                subArchetype: selectedSubArchetype
-            })
-        });
-        closeNui();
-    });
-
-    // Close NUI
-    function closeNui() {
-        app.classList.add('hidden');
-        fetch('https://fish_normalizer/close', { method: 'POST' });
-    }
-
-    // ESC key to close
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            closeNui();
-        }
-    });
-
-    // Initial notification
-    fetch('https://fish_normalizer/nuiReady', { method: 'POST' });
-})();
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeNUI();
+});

@@ -1,55 +1,50 @@
+-- ============================================================
 -- fish_remaps: Client NUI Handler
-RegisterNUICallback('nuiReady', function(data, cb)
+-- Routes all NUI callbacks to server events.
+-- ============================================================
+
+local isNuiOpen = false
+
+-- ── Open (triggered from server) ─────────────────────────────
+
+RegisterNetEvent('fish_remaps:openNUI')
+AddEventHandler('fish_remaps:openNUI', function(data)
+    isNuiOpen = true
+    SetNuiFocus(true, true)
+    SendNUIMessage({
+        action            = 'openRemap',
+        plate             = data.plate,
+        vehicleNetId      = data.vehicleNetId,
+        originalArchetype = data.originalArchetype,
+        currentArchetype  = data.currentArchetype,
+        subArchetype      = data.subArchetype,
+        stage             = data.stage,
+        existingData      = data.existingData,
+        costs = {
+            archetype_change      = 15000,
+            subarchetype_change   = 5000,
+            adjustment_per_point  = 1000,
+        }
+    })
+end)
+
+-- ── NUI Callbacks ────────────────────────────────────────────
+
+RegisterNUICallback('close', function(data, cb)
+    isNuiOpen = false
+    SetNuiFocus(false, false)
     cb('ok')
 end)
 
-RegisterNUICallback('adjustStat', function(data, cb)
-    if not currentVehicle then cb('error'); return end
-
-    local stat = data.stat
-    local value = tonumber(data.value) or 0
-
-    -- Clamp to max adjustment
-    value = math.max(-Config.MaxStatAdjustment, math.min(Config.MaxStatAdjustment, value))
-
-    cb(json.encode({
-        stat = stat,
-        value = value,
-        clamped = value ~= tonumber(data.value)
-    }))
+RegisterNUICallback('confirmRemap', function(data, cb)
+    if not data.plate then cb('error'); return end
+    TriggerServerEvent('fish_remaps:confirmRemap', data.plate, data.vehicleNetId, data.data)
+    isNuiOpen = false
+    SetNuiFocus(false, false)
+    cb('ok')
 end)
 
-RegisterNUICallback('getArchetypeList', function(data, cb)
-    local archetypes = {}
-    local normalizerConfig = exports['fish_normalizer']:GetConfig()
-    if normalizerConfig and normalizerConfig.Archetypes then
-        for key, arch in pairs(normalizerConfig.Archetypes) do
-            table.insert(archetypes, {
-                key = key,
-                label = arch.label,
-                icon = arch.icon,
-                description = arch.description
-            })
-        end
-    end
-    cb(json.encode(archetypes))
-end)
-
-RegisterNUICallback('getSubArchetypeList', function(data, cb)
-    local subArchetypes = {}
-    local normalizerConfig = exports['fish_normalizer']:GetConfig()
-    if normalizerConfig and normalizerConfig.SubArchetypes then
-        for key, sub in pairs(normalizerConfig.SubArchetypes) do
-            table.insert(subArchetypes, {
-                key = key,
-                label = sub.label,
-                icon = sub.icon,
-                description = sub.description
-            })
-        end
-    end
-    cb(json.encode(subArchetypes))
-end)
+-- ── Export ────────────────────────────────────────────────────
 
 function IsRemapOpen()
     return isNuiOpen

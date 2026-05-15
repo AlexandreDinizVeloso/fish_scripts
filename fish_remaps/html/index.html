@@ -1,404 +1,174 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fish Remaps</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<title>FISH Remaps — DNA Tuning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070810;--bg2:#0d0e1a;--bg3:#131528;
+  --glass:rgba(255,255,255,0.03);--border:rgba(255,255,255,0.07);
+  --cyan:#00d4ff;--orange:#ff6b00;--green:#00ff88;--red:#ff1744;--purple:#a855f7;--yellow:#ffd600;
+  --text:#e8eaf6;--muted:rgba(232,234,246,0.4);
+  --mono:'Share Tech Mono',monospace;--sans:'Space Grotesk',sans-serif;--orb:'Orbitron',sans-serif;
+}
+body{font-family:var(--sans);background:transparent;color:var(--text);height:100vh;width:100vw;display:none;align-items:center;justify-content:center;overflow:hidden}
+body.visible{display:flex}
+
+.wrap{width:840px;max-height:90vh;background:linear-gradient(145deg,#0d0f1e,#080916);border:1px solid rgba(0,212,255,0.12);border-radius:16px;box-shadow:0 0 60px rgba(0,212,255,0.04),inset 0 1px 0 rgba(255,255,255,0.04);overflow:hidden;display:flex;flex-direction:column}
+
+/* Header */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--cyan),var(--purple));border-radius:8px;display:flex;align-items:center;justify-content:center}
+.hdr h1{font-family:var(--orb);font-size:13px;letter-spacing:3px;color:var(--cyan)}
+.btn-close{background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--muted);border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all 0.2s}
+.btn-close:hover{background:rgba(255,23,68,0.15);color:var(--red)}
+
+/* DNA Bar */
+.dna-bar{padding:12px 20px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:16px}
+.dna-pill{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid}
+.dna-original{border-color:rgba(255,255,255,0.2);color:var(--muted)}
+.dna-arrow{color:var(--muted)}
+.dna-current{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,0.08)}
+.dna-blend{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--muted)}
+.dna-blend span{color:var(--cyan)}
+.stage-badge{padding:3px 10px;border-radius:4px;font-family:var(--mono);font-size:10px;border:1px solid rgba(0,212,255,0.3);color:var(--cyan);background:rgba(0,212,255,0.08)}
+.cost-preview{font-family:var(--orb);font-size:14px;font-weight:700;color:var(--green);margin-left:8px}
+
+/* Body Grid */
+.body{display:grid;grid-template-columns:1fr 240px;flex:1;min-height:0;overflow:hidden}
+
+/* Left: Archetype + Stats */
+.left{padding:16px 18px;display:flex;flex-direction:column;gap:14px;border-right:1px solid var(--border);overflow-y:auto}
+.section-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px}
+
+.arch-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.arch-card{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:9px;padding:9px 7px;cursor:pointer;text-align:center;transition:all 0.2s}
+.arch-card:hover{border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.04)}
+.arch-card.selected{border-color:var(--cyan);background:rgba(0,212,255,0.09);box-shadow:0 0 10px rgba(0,212,255,0.1)}
+.arch-card .icon{font-size:18px}
+.arch-card .name{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-top:3px}
+
+/* Stat Sliders (trade-offs) */
+.slider-group{display:flex;flex-direction:column;gap:10px}
+.slider-row{display:flex;align-items:center;gap:10px}
+.slider-label{font-family:var(--mono);font-size:10px;color:var(--muted);width:90px;flex-shrink:0}
+.slider-input{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);outline:none;cursor:pointer}
+.slider-input::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px rgba(0,212,255,0.5);cursor:pointer}
+.slider-val{font-family:var(--mono);font-size:12px;width:40px;text-align:right}
+.slider-val.pos{color:var(--green)}
+.slider-val.neg{color:var(--red)}
+.slider-val.zero{color:var(--muted)}
+
+/* Sub-archetype pills */
+.sub-pills{display:flex;flex-wrap:wrap;gap:5px}
+.sub-pill{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all 0.2s}
+.sub-pill:hover{border-color:rgba(168,85,247,0.3);color:var(--text)}
+.sub-pill.selected{border-color:var(--purple);background:rgba(168,85,247,0.1);color:var(--purple)}
+
+/* Right: Summary */
+.right{padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.summary-card{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:12px}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.summary-row:last-child{border-bottom:none}
+.summary-key{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.summary-val{font-family:var(--mono);font-size:11px;font-weight:600}
+
+/* DNA Visualizer */
+.dna-viz{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:12px}
+.dna-viz-title{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:10px}
+.dna-segment{margin-bottom:8px}
+.dna-seg-label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:3px}
+.dna-seg-bar{height:5px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,0.06);position:relative}
+.dna-seg-orig{position:absolute;top:0;left:0;height:100%;border-radius:3px;background:rgba(255,255,255,0.2)}
+.dna-seg-new{position:absolute;top:0;left:0;height:100%;border-radius:3px;background:var(--cyan);opacity:0.7}
+
+/* Footer */
+.ftr{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0}
+.ftr-cost{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;border:1px solid;cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:500;transition:all 0.2s}
+.btn-ghost{background:rgba(255,255,255,0.04);border-color:var(--border);color:var(--muted)}
+.btn-ghost:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.btn-cyan{background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.4);color:var(--cyan)}
+.btn-cyan:hover{background:rgba(0,212,255,0.2);box-shadow:0 0 12px rgba(0,212,255,0.15)}
+.material-symbols-sharp{font-size:16px!important}
+</style>
 </head>
 <body>
-    <div id="app" class="hidden">
-        <div class="remap-container">
-            <!-- Header -->
-            <div class="header">
-                <div class="header-left">
-                    <div class="logo">FISH<span class="accent">REMAPS</span></div>
-                    <div class="version">DNA ENGINE v2.0</div>
-                </div>
-                <div class="header-center">
-                    <div class="vehicle-name" id="vehicleName">VEHICLE</div>
-                    <div class="plate" id="plateDisplay">PLATE</div>
-                </div>
-                <div class="header-right">
-                    <div class="balance-display">
-                        <span class="balance-label">BALANCE</span>
-                        <span class="balance-value" id="balanceDisplay">$0</span>
-                    </div>
-                    <button class="btn-close" id="btnClose">✕</button>
-                </div>
-            </div>
-
-            <!-- Tab Navigation -->
-            <nav class="tab-nav">
-                <button class="tab-btn active" data-tab="dyno">
-                    <span class="tab-icon">⚡</span>
-                    <span class="tab-label">Dyno Tuning</span>
-                </button>
-                <button class="tab-btn" data-tab="transmission">
-                    <span class="tab-icon">⚙️</span>
-                    <span class="tab-label">Transmission</span>
-                </button>
-                <button class="tab-btn" data-tab="remap">
-                    <span class="tab-icon">🧬</span>
-                    <span class="tab-label">Remap</span>
-                </button>
-            </nav>
-
-            <!-- Main Content -->
-            <div class="main-content">
-
-                <!-- ==================== DYNO TUNING TAB ==================== -->
-                <div class="tab-content active" id="tab-dyno">
-                    <div class="dyno-layout">
-                        <!-- Left: Controls -->
-                        <div class="panel dyno-controls">
-                            <div class="panel-title">ECU MAP SETTINGS</div>
-
-                            <div class="slider-group">
-                                <div class="slider-header">
-                                    <label>Air-Fuel Ratio (AFR)</label>
-                                    <span class="slider-val" id="valAfr">13.5</span>
-                                </div>
-                                <input type="range" id="sliderAfr" class="dyno-slider" min="11.0" max="15.0" step="0.1" value="13.5">
-                                <div class="slider-markers">
-                                    <span class="marker-rich">Rich (11.0)</span>
-                                    <span class="marker-optimal">Optimal 13.2–13.8</span>
-                                    <span class="marker-lean">Lean (15.0)</span>
-                                </div>
-                                <div class="afr-warning hidden" id="afrWarning">
-                                    <span class="warning-icon">⚠️</span>
-                                    <span class="warning-text" id="afrWarningText"></span>
-                                </div>
-                            </div>
-
-                            <div class="slider-group">
-                                <div class="slider-header">
-                                    <label>Ignition Timing</label>
-                                    <span class="slider-val" id="valTiming">0°</span>
-                                </div>
-                                <input type="range" id="sliderTiming" class="dyno-slider" min="-10" max="10" step="1" value="0">
-                                <div class="slider-markers">
-                                    <span>Retard (-10°)</span>
-                                    <span>Advance (+10°)</span>
-                                </div>
-                            </div>
-
-                            <div class="slider-group" id="boostGroup">
-                                <div class="slider-header">
-                                    <label>Boost Pressure</label>
-                                    <span class="slider-val" id="valBoost">0 PSI</span>
-                                </div>
-                                <input type="range" id="sliderBoost" class="dyno-slider" min="0" max="30" step="1" value="0">
-                                <div class="slider-markers">
-                                    <span>N/A (0)</span>
-                                    <span>Full Boost (30 PSI)</span>
-                                </div>
-                            </div>
-
-                            <div class="slider-group">
-                                <div class="slider-header">
-                                    <label>Final Drive Ratio</label>
-                                    <span class="slider-val" id="valDrive">3.55</span>
-                                </div>
-                                <input type="range" id="sliderDrive" class="dyno-slider" min="1.5" max="4.5" step="0.05" value="3.55">
-                                <div class="slider-markers">
-                                    <span>Top Speed (1.5)</span>
-                                    <span>Acceleration (4.5)</span>
-                                </div>
-                            </div>
-
-                            <div class="dyno-cost">
-                                <span>ECU Flash Cost:</span>
-                                <span class="cost-value" id="dynoCost">$2,000</span>
-                            </div>
-                            <button class="btn-primary" id="btnApplyDyno">
-                                <span>⚡</span> APPLY ECU FLASH
-                            </button>
-                        </div>
-
-                        <!-- Right: Telemetry -->
-                        <div class="panel dyno-telemetry">
-                            <div class="panel-title">DYNO TELEMETRY</div>
-
-                            <!-- Power Gauges -->
-                            <div class="gauges-row">
-                                <div class="gauge-card">
-                                    <div class="gauge-ring" id="gaugeHpRing">
-                                        <svg viewBox="0 0 120 120">
-                                            <circle class="gauge-bg" cx="60" cy="60" r="52"/>
-                                            <circle class="gauge-fill" id="gaugeHpFill" cx="60" cy="60" r="52"/>
-                                        </svg>
-                                        <div class="gauge-center">
-                                            <span class="gauge-number" id="gaugeHp">250</span>
-                                            <span class="gauge-unit">HP</span>
-                                        </div>
-                                    </div>
-                                    <div class="gauge-label">Est. Power</div>
-                                </div>
-                                <div class="gauge-card">
-                                    <div class="gauge-ring" id="gaugeTqRing">
-                                        <svg viewBox="0 0 120 120">
-                                            <circle class="gauge-bg" cx="60" cy="60" r="52"/>
-                                            <circle class="gauge-fill" id="gaugeTqFill" cx="60" cy="60" r="52"/>
-                                        </svg>
-                                        <div class="gauge-center">
-                                            <span class="gauge-number" id="gaugeTq">300</span>
-                                            <span class="gauge-unit">Nm</span>
-                                        </div>
-                                    </div>
-                                    <div class="gauge-label">Est. Torque</div>
-                                </div>
-                            </div>
-
-                            <!-- Stats Grid -->
-                            <div class="telemetry-stats">
-                                <div class="stat-card">
-                                    <div class="stat-icon">🏎️</div>
-                                    <div class="stat-info">
-                                        <div class="stat-label">0-100 km/h</div>
-                                        <div class="stat-value" id="statAccel">4.5s</div>
-                                    </div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="stat-icon">💨</div>
-                                    <div class="stat-info">
-                                        <div class="stat-label">Top Speed</div>
-                                        <div class="stat-value" id="statTopSpeed">220 km/h</div>
-                                    </div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="stat-icon">🌡️</div>
-                                    <div class="stat-info">
-                                        <div class="stat-label">Engine Temp</div>
-                                        <div class="stat-value" id="statTemp">90°C</div>
-                                    </div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="stat-icon">📊</div>
-                                    <div class="stat-info">
-                                        <div class="stat-label">Rank Impact</div>
-                                        <div class="stat-value" id="statRank">—</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Power Curve -->
-                            <div class="power-curve-container">
-                                <div class="panel-subtitle">POWER CURVE</div>
-                                <canvas id="powerCurveCanvas" width="500" height="180"></canvas>
-                            </div>
-
-                            <!-- Alert -->
-                            <div class="dyno-alert" id="dynoAlert">
-                                <span class="alert-icon">✅</span>
-                                <span class="alert-text">Optimal tuning. All parameters within safe range.</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ==================== TRANSMISSION TAB ==================== -->
-                <div class="tab-content" id="tab-transmission">
-                    <div class="trans-layout">
-                        <!-- Transmission Mode -->
-                        <div class="panel trans-panel">
-                            <div class="panel-title">TRANSMISSION MODE</div>
-                            <p class="panel-desc">Select the shifting behavior for your vehicle.</p>
-                            <div class="mode-grid" id="transModeGrid">
-                                <div class="mode-card" data-mode="auto">
-                                    <div class="mode-icon">🔄</div>
-                                    <div class="mode-name">Automatic</div>
-                                    <div class="mode-desc">Standard smooth shifting</div>
-                                </div>
-                                <div class="mode-card" data-mode="eco">
-                                    <div class="mode-icon">🌿</div>
-                                    <div class="mode-name">Eco</div>
-                                    <div class="mode-desc">Fuel-efficient early shifts</div>
-                                </div>
-                                <div class="mode-card" data-mode="sport">
-                                    <div class="mode-icon">🔥</div>
-                                    <div class="mode-name">Sport</div>
-                                    <div class="mode-desc">Aggressive high-RPM shifts</div>
-                                </div>
-                                <div class="mode-card" data-mode="manual">
-                                    <div class="mode-icon">🎛️</div>
-                                    <div class="mode-name">Manual</div>
-                                    <div class="mode-desc">Full driver control</div>
-                                </div>
-                            </div>
-                            <div class="trans-cost">
-                                <span>Mode Change Cost:</span>
-                                <span class="cost-value">$3,000</span>
-                            </div>
-                            <button class="btn-primary" id="btnApplyTransMode">
-                                <span>⚙️</span> SET MODE
-                            </button>
-                        </div>
-
-                        <!-- Gear Ratio Preset -->
-                        <div class="panel trans-panel">
-                            <div class="panel-title">GEAR RATIO PRESET</div>
-                            <p class="panel-desc">Adjust final drive and individual gear lengths.</p>
-                            <div class="mode-grid" id="gearRatioGrid">
-                                <div class="mode-card" data-preset="stock">
-                                    <div class="mode-icon">🔧</div>
-                                    <div class="mode-name">Stock</div>
-                                    <div class="mode-desc">Factory default ratios</div>
-                                </div>
-                                <div class="mode-card" data-preset="short">
-                                    <div class="mode-icon">⚡</div>
-                                    <div class="mode-name">Short</div>
-                                    <div class="mode-desc">Quick acceleration</div>
-                                </div>
-                                <div class="mode-card" data-preset="long">
-                                    <div class="mode-icon">🚀</div>
-                                    <div class="mode-name">Long</div>
-                                    <div class="mode-desc">Higher top speed</div>
-                                </div>
-                                <div class="mode-card" data-preset="drag">
-                                    <div class="mode-icon">🏁</div>
-                                    <div class="mode-name">Drag</div>
-                                    <div class="mode-desc">4-speed max launch</div>
-                                </div>
-                                <div class="mode-card" data-preset="drift">
-                                    <div class="mode-icon">🌪️</div>
-                                    <div class="mode-name">Drift</div>
-                                    <div class="mode-desc">Balanced for slides</div>
-                                </div>
-                            </div>
-
-                            <!-- Impact Preview -->
-                            <div class="impact-preview" id="gearImpactPreview">
-                                <div class="impact-row">
-                                    <span class="impact-label">Acceleration</span>
-                                    <span class="impact-value" id="impactAccel">+0%</span>
-                                </div>
-                                <div class="impact-row">
-                                    <span class="impact-label">Top Speed</span>
-                                    <span class="impact-value" id="impactSpeed">+0%</span>
-                                </div>
-                            </div>
-
-                            <div class="trans-cost">
-                                <span>Gear Ratio Cost:</span>
-                                <span class="cost-value">$5,000</span>
-                            </div>
-                            <button class="btn-primary" id="btnApplyGearRatio">
-                                <span>⚙️</span> INSTALL GEARING
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ==================== REMAP TAB ==================== -->
-                <div class="tab-content" id="tab-remap">
-                    <div class="remap-layout">
-                        <!-- Left: DNA Visualization -->
-                        <div class="panel dna-panel">
-                            <div class="panel-title">DNA INHERITANCE</div>
-
-                            <div class="dna-visual">
-                                <div class="dna-helix">
-                                    <div class="dna-strand original">
-                                        <div class="dna-label">ORIGINAL</div>
-                                        <div class="dna-archetype" id="originalArchLabel">Esportivo</div>
-                                        <div class="dna-percent">25%</div>
-                                    </div>
-                                    <div class="dna-blend-indicator">
-                                        <div class="blend-arrow">⟶</div>
-                                        <div class="blend-value">75% / 25%</div>
-                                    </div>
-                                    <div class="dna-strand new">
-                                        <div class="dna-label">NEW</div>
-                                        <div class="dna-archetype" id="newArchLabel">Esportivo</div>
-                                        <div class="dna-percent">75%</div>
-                                    </div>
-                                </div>
-
-                                <div class="dna-bars" id="dnaBars"></div>
-                            </div>
-
-                            <div class="comparison">
-                                <div class="panel-title">BEFORE / AFTER</div>
-                                <div class="comparison-bars" id="comparisonBars"></div>
-                                <div class="rank-change" id="rankChange">
-                                    <span class="rank-label">Rank Change:</span>
-                                    <span class="rank-before" id="rankBefore">C</span>
-                                    <span class="rank-arrow">→</span>
-                                    <span class="rank-after" id="rankAfter">C</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Center: Archetype Selector -->
-                        <div class="panel selector-panel">
-                            <div class="panel-title">TARGET ARCHETYPE</div>
-                            <div class="archetype-grid" id="archetypeGrid"></div>
-
-                            <div class="panel-title" style="margin-top: 16px;">SUB-ARCHETYPE</div>
-                            <div class="subarch-grid" id="subArchGrid"></div>
-
-                            <!-- Subarchetype Bonus Preview -->
-                            <div class="subarch-bonus-preview hidden" id="subarchBonusPreview">
-                                <div class="panel-subtitle">SUB-ARCHETYPE BONUSES</div>
-                                <div class="bonus-list" id="bonusList"></div>
-                            </div>
-                        </div>
-
-                        <!-- Right: Stat Adjustments -->
-                        <div class="panel adjust-panel">
-                            <div class="panel-title">REMAP POINTS</div>
-                            <div class="remap-points-container">
-                                <div class="remap-points-bar">
-                                    <div id="remapPointsFill" class="remap-points-fill" style="width: 100%"></div>
-                                </div>
-                                <div class="remap-points-info">
-                                    Balance: <span id="remapPointsUsed" class="points-used">0</span>
-                                </div>
-                            </div>
-
-                            <div class="panel-title" style="margin-top: 16px;">STAT FINE-TUNING</div>
-                            <div class="adjustments" id="adjustments"></div>
-
-                            <div class="adjust-info">
-                                <div class="info-icon">ℹ️</div>
-                                <div class="info-text">Adjust stats within ±15 points. Zero-sum: gains in one stat must be offset by losses in another.</div>
-                            </div>
-
-                            <!-- Remap Cost Summary -->
-                            <div class="remap-cost-summary" id="remapCostSummary">
-                                <div class="cost-line" id="costArchetype" style="display:none">
-                                    <span>Archetype Change</span>
-                                    <span>$15,000</span>
-                                </div>
-                                <div class="cost-line" id="costSubarch" style="display:none">
-                                    <span>Sub-archetype Change</span>
-                                    <span>$5,000</span>
-                                </div>
-                                <div class="cost-line" id="costAdjustment" style="display:none">
-                                    <span>Stat Adjustments</span>
-                                    <span>$0</span>
-                                </div>
-                                <div class="cost-total">
-                                    <span>Total</span>
-                                    <span id="remapTotalCost">$0</span>
-                                </div>
-                            </div>
-
-                            <div class="confirm-area">
-                                <button class="btn-confirm" id="btnConfirmRemap">
-                                    <span class="btn-icon">⚡</span>
-                                    <span>APPLY REMAP</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-icon"><span class="material-symbols-sharp">memory</span></div>
+      <h1>ECU REMAP</h1>
     </div>
-    <script src="script.js"></script>
+    <button class="btn-close" onclick="closeNUI()"><span class="material-symbols-sharp">close</span></button>
+  </div>
+
+  <!-- DNA Bar -->
+  <div class="dna-bar">
+    <span class="dna-pill dna-original" id="dnaOriginal">?</span>
+    <span class="dna-arrow">›</span>
+    <span class="dna-pill dna-current" id="dnaCurrent">?</span>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span class="dna-blend">DNA Blend <span>75/25</span></span>
+      <span class="stage-badge" id="stageBadge">Stage 0</span>
+    </div>
+    <span class="cost-preview" id="costPreview">$0</span>
+  </div>
+
+  <div class="body">
+    <!-- Left -->
+    <div class="left">
+      <!-- Archetype -->
+      <div>
+        <div class="section-label">Target Archetype</div>
+        <div class="arch-grid" id="archGrid"></div>
+      </div>
+      <!-- Sub-archetype -->
+      <div>
+        <div class="section-label">Sub-Archetype (Personality)</div>
+        <div class="sub-pills" id="subPills"></div>
+      </div>
+      <!-- Stat adjustments -->
+      <div>
+        <div class="section-label">Stat Trade-offs (within stage limits)</div>
+        <div class="slider-group" id="sliderGroup"></div>
+      </div>
+    </div>
+
+    <!-- Right Summary -->
+    <div class="right">
+      <div>
+        <div class="section-label">Summary</div>
+        <div class="summary-card" id="summaryCard"></div>
+      </div>
+
+      <div class="dna-viz">
+        <div class="dna-viz-title">DNA Inheritance Visualization</div>
+        <div id="dnaViz"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--muted)">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:rgba(255,255,255,0.2);border-radius:2px;display:inline-block"></span>Original</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:var(--cyan);border-radius:2px;display:inline-block"></span>New (75%)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ftr">
+    <div class="ftr-cost">Total: <span id="ftrCost" style="color:var(--green);font-weight:600">$0</span></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="closeNUI()">Cancel</button>
+      <button class="btn btn-cyan" onclick="applyRemap()">
+        <span class="material-symbols-sharp">memory</span>
+        Apply Remap
+      </button>
+    </div>
+  </div>
+</div>
+<script src="script.js"></script>
 </body>
 </html>

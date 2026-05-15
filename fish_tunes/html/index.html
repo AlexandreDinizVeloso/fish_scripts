@@ -1,214 +1,170 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fish Tunes</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<title>FISH Tunes — OBD-III Tuning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070810;--bg2:#0d0e1a;--bg3:#131528;
+  --glass:rgba(255,255,255,0.03);--border:rgba(255,255,255,0.07);
+  --cyan:#00d4ff;--orange:#ff6b00;--green:#00ff88;--red:#ff1744;--purple:#a855f7;--yellow:#ffd600;
+  --text:#e8eaf6;--muted:rgba(232,234,246,0.4);
+  --mono:'Share Tech Mono',monospace;--sans:'Space Grotesk',sans-serif;--orb:'Orbitron',sans-serif;
+}
+body{font-family:var(--sans);background:transparent;color:var(--text);height:100vh;width:100vw;display:none;align-items:center;justify-content:center;overflow:hidden}
+body.visible{display:flex}
+
+.wrap{width:880px;max-height:92vh;background:linear-gradient(145deg,#0d0f1e,#080916);border:1px solid rgba(0,255,136,0.12);border-radius:16px;box-shadow:0 0 60px rgba(0,255,136,0.04),inset 0 1px 0 rgba(255,255,255,0.04);overflow:hidden;display:flex;flex-direction:column}
+
+/* Header */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(0,255,136,0.02);flex-shrink:0}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--green),var(--cyan));border-radius:8px;display:flex;align-items:center;justify-content:center}
+.hdr h1{font-family:var(--orb);font-size:13px;letter-spacing:3px;color:var(--green)}
+.btn-close{background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--muted);border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all 0.2s}
+.btn-close:hover{background:rgba(255,23,68,0.15);color:var(--red)}
+
+/* Vehicle strip */
+.veh{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+.veh-name{font-size:14px;font-weight:600}
+.veh-plate{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);border-radius:4px;padding:2px 8px;color:var(--muted);letter-spacing:2px}
+.pi-chip{font-family:var(--orb);font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid rgba(0,212,255,0.3);background:rgba(0,212,255,0.08);color:var(--cyan)}
+.heat-wrap{margin-left:auto;display:flex;align-items:center;gap:8px}
+.heat-label{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase}
+.heat-bar-track{width:120px;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden}
+.heat-bar-fill{height:100%;border-radius:3px;transition:width 0.4s,background 0.4s}
+.heat-val{font-family:var(--mono);font-size:12px;font-weight:600}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;padding:0 20px}
+.tab{padding:11px 16px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.2s;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--green);border-bottom-color:var(--green)}
+.tab .material-symbols-sharp{font-size:16px!important}
+
+/* Tab Panels */
+.panels{flex:1;overflow-y:auto;min-height:0}
+.panel{display:none;padding:16px 20px}
+.panel.active{display:block}
+
+/* Parts Grid */
+.parts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.part-card{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:12px;transition:border-color 0.2s}
+.part-card:hover{border-color:rgba(0,255,136,0.2)}
+.part-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.part-icon{width:28px;height:28px;background:rgba(0,255,136,0.08);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.part-name{font-size:12px;font-weight:600}
+.part-current{font-family:var(--mono);font-size:9px;color:var(--muted);margin-left:auto}
+.level-pills{display:flex;gap:4px;flex-wrap:wrap}
+.lv-pill{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border);cursor:pointer;transition:all 0.2s;color:var(--muted);position:relative}
+.lv-pill:hover{border-color:var(--green);color:var(--green)}
+.lv-pill.active-stock{border-color:#607d8b;color:#90a4ae;background:rgba(96,125,139,0.1)}
+.lv-pill.active-l1{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,0.1)}
+.lv-pill.active-l2{border-color:#4fc3f7;color:#4fc3f7;background:rgba(79,195,247,0.1)}
+.lv-pill.active-l3{border-color:var(--orange);color:var(--orange);background:rgba(255,107,0,0.1)}
+.lv-pill.active-l4{border-color:var(--red);color:var(--red);background:rgba(255,23,68,0.1)}
+.lv-pill.active-l5{border-color:var(--purple);color:var(--purple);background:rgba(168,85,247,0.1)}
+.lv-pill.illegal::after{content:'🔥';font-size:8px;margin-left:2px}
+.lv-pill.instab::after{content:'⚡';font-size:8px;margin-left:2px}
+
+/* Diagnostics */
+.diag-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.diag-card{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:10px}
+.diag-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.diag-name{font-size:11px;font-weight:500}
+.diag-pct{font-family:var(--mono);font-size:12px;font-weight:600}
+.diag-bar-track{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden}
+.diag-bar-fill{height:100%;border-radius:2px;transition:width 0.4s}
+
+/* Repair */
+.repair-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+.repair-info{display:flex;flex-direction:column;gap:2px}
+.repair-label{font-size:12px;font-weight:500}
+.repair-hint{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.btn-repair{padding:5px 12px;border-radius:6px;border:1px solid rgba(0,255,136,0.3);background:rgba(0,255,136,0.08);color:var(--green);font-size:11px;cursor:pointer;font-family:var(--mono);transition:all 0.2s}
+.btn-repair:hover{background:rgba(0,255,136,0.15)}
+
+/* Footer */
+.ftr{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--border);flex-shrink:0}
+.ftr-hint{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;border:1px solid;cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:500;transition:all 0.2s}
+.btn-ghost{background:rgba(255,255,255,0.04);border-color:var(--border);color:var(--muted)}
+.btn-ghost:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.material-symbols-sharp{font-size:16px!important}
+
+/* Instability warning */
+.instab-warn{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,23,68,0.08);border:1px solid rgba(255,23,68,0.25);border-radius:8px;margin-bottom:10px;font-size:11px;color:var(--red)}
+.instab-warn .material-symbols-sharp{color:var(--red)}
+</style>
 </head>
 <body>
-    <div id="app" class="hidden">
-        <div class="tunes-container">
-            <!-- Header -->
-            <div class="header">
-                <div class="header-left">
-                    <div class="logo">FISH<span class="accent">TUNES</span></div>
-                </div>
-                <div class="header-center">
-                    <div class="vehicle-name" id="vehicleName">VEHICLE</div>
-                    <div class="plate" id="plateDisplay">PLATE</div>
-                </div>
-                <div class="header-right">
-                    <div class="heat-display">
-                        <div class="heat-label">HEAT</div>
-                        <div class="heat-bar-container">
-                            <div class="heat-bar" id="heatBar" style="width:0%"></div>
-                        </div>
-                        <div class="heat-value" id="heatValue">0</div>
-                    </div>
-                    <button class="btn-close" id="btnClose">✕</button>
-                </div>
-            </div>
-
-            <!-- Tab Navigation -->
-            <nav class="tab-nav" id="tabNav">
-                <button class="nav-tab active" data-tab="maintenance">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-                    Maintenance
-                </button>
-                <button class="nav-tab" data-tab="drivetrain">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                    Drivetrain
-                </button>
-                <button class="nav-tab" data-tab="swap">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-                    Swap
-                </button>
-                <button class="nav-tab" data-tab="parts">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
-                    Parts
-                </button>
-                <button class="nav-tab" data-tab="crafting">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
-                    Crafting
-                </button>
-            </nav>
-
-            <!-- Main Content -->
-            <div class="main-content">
-                <!-- ═══ MAINTENANCE TAB ═══ -->
-                <div class="tab-content active" id="tab-maintenance">
-                    <div class="maintenance-grid">
-                        <!-- Diagnostics -->
-                        <div class="panel">
-                            <div class="panel-title">VEHICLE DIAGNOSTICS</div>
-                            <div class="diagnostics-list" id="diagnosticsList">
-                                <!-- Generated by JS -->
-                            </div>
-                        </div>
-                        <!-- Tire Management -->
-                        <div class="panel">
-                            <div class="panel-title">TIRE MANAGEMENT</div>
-                            <div class="tire-grid">
-                                <div class="tire-card" id="tireFL">
-                                    <div class="tire-pos">FL</div>
-                                    <div class="tire-health-ring"><div class="tire-health-fill"></div></div>
-                                    <div class="tire-pct">100%</div>
-                                </div>
-                                <div class="tire-card" id="tireFR">
-                                    <div class="tire-pos">FR</div>
-                                    <div class="tire-health-ring"><div class="tire-health-fill"></div></div>
-                                    <div class="tire-pct">100%</div>
-                                </div>
-                                <div class="tire-card" id="tireRL">
-                                    <div class="tire-pos">RL</div>
-                                    <div class="tire-health-ring"><div class="tire-health-fill"></div></div>
-                                    <div class="tire-pct">100%</div>
-                                </div>
-                                <div class="tire-card" id="tireRR">
-                                    <div class="tire-pos">RR</div>
-                                    <div class="tire-health-ring"><div class="tire-health-fill"></div></div>
-                                    <div class="tire-pct">100%</div>
-                                </div>
-                            </div>
-                            <div class="tire-actions">
-                                <button class="btn-action" id="btnRepairAll">🔧 Repair All Parts</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ═══ DRIVETRAIN TAB ═══ -->
-                <div class="tab-content" id="tab-drivetrain">
-                    <div class="panel centered-panel">
-                        <div class="panel-title">DRIVETRAIN CONVERSION</div>
-                        <p class="subtitle">Modify vehicle traction distribution. Cost: <span class="cost-highlight">$5,000</span></p>
-                        <div class="drivetrain-cards">
-                            <div class="dt-card" data-dt="RWD">
-                                <div class="dt-icon">RWD</div>
-                                <h3>Rear-Wheel Drive</h3>
-                                <p>Optimal for drifting and track use. Oversteer prone.</p>
-                            </div>
-                            <div class="dt-card" data-dt="FWD">
-                                <div class="dt-icon">FWD</div>
-                                <h3>Front-Wheel Drive</h3>
-                                <p>Stable handling, prone to understeer. Economic.</p>
-                            </div>
-                            <div class="dt-card" data-dt="AWD">
-                                <div class="dt-icon">AWD</div>
-                                <h3>All-Wheel Drive</h3>
-                                <p>Maximum launch grip and cornering stability.</p>
-                            </div>
-                        </div>
-                        <button class="btn-primary glow-effect" id="btnConvertDrivetrain">Convert Drivetrain — $5,000</button>
-                    </div>
-                </div>
-
-                <!-- ═══ SWAP TAB (Class Swap) ═══ -->
-                <div class="tab-content" id="tab-swap">
-                    <div class="panel centered-panel">
-                        <div class="panel-title">CLASS SWAP</div>
-                        <p class="subtitle">Normalize your vehicle into a different performance class. Requires fully stock or normalized car.</p>
-                        <div class="swap-info">
-                            <div class="swap-current">
-                                <span class="swap-label">Current Class</span>
-                                <span class="swap-value" id="currentClass">—</span>
-                            </div>
-                            <div class="swap-arrow">→</div>
-                            <div class="swap-target">
-                                <span class="swap-label">Target Class</span>
-                                <select id="targetClass" class="swap-select">
-                                    <option value="C">Class C</option>
-                                    <option value="B">Class B</option>
-                                    <option value="A">Class A</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="swap-cost-display">
-                            <span>Estimated Cost:</span>
-                            <span class="swap-cost" id="swapCost">$0</span>
-                        </div>
-                        <div class="swap-note">Rank S is not achievable via class swap.</div>
-                        <button class="btn-primary glow-effect" id="btnApplySwap">Apply Class Swap</button>
-                    </div>
-                </div>
-
-                <!-- ═══ PARTS TAB ═══ -->
-                <div class="tab-content" id="tab-parts">
-                    <div class="parts-layout">
-                        <!-- Category List -->
-                        <div class="panel category-panel">
-                            <div class="panel-title">PART CATEGORIES</div>
-                            <div class="category-tabs" id="categoryTabs">
-                                <!-- Generated by JS -->
-                            </div>
-                            <div class="total-stats">
-                                <div class="panel-title">TOTAL BONUSES</div>
-                                <div class="total-bars" id="totalBars">
-                                    <!-- Generated by JS -->
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Level Selector -->
-                        <div class="panel levels-panel">
-                            <div class="panel-title" id="categoryTitle">SELECT PART LEVEL</div>
-                            <div class="levels-grid" id="levelsGrid">
-                                <!-- Generated by JS -->
-                            </div>
-                            <div class="part-info" id="partInfo">
-                                <div class="part-info-title">PART DETAILS</div>
-                                <div class="part-info-content" id="partInfoContent">Select a part level to see details</div>
-                            </div>
-                        </div>
-                        <!-- Compare -->
-                        <div class="panel compare-panel">
-                            <div class="panel-title">STAT COMPARISON</div>
-                            <div class="compare-bars" id="compareBars">
-                                <!-- Generated by JS -->
-                            </div>
-                            <div class="warnings" id="warnings"></div>
-                            <div class="action-area">
-                                <button class="btn-install" id="btnInstall"><span>⚡</span> INSTALL PART</button>
-                                <div class="install-cost" id="installCost"></div>
-                                <button class="btn-uninstall" id="btnUninstall"><span>🔧</span> REMOVE TO STOCK</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ═══ CRAFTING TAB ═══ -->
-                <div class="tab-content" id="tab-crafting">
-                    <div class="panel">
-                        <div class="panel-title">PART CRAFTING WORKBENCH</div>
-                        <div class="crafting-grid" id="craftingGrid">
-                            <!-- Generated by JS -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-icon"><span class="material-symbols-sharp">build</span></div>
+      <h1>TUNING</h1>
     </div>
-    <script src="script.js"></script>
+    <button class="btn-close" onclick="closeNUI()"><span class="material-symbols-sharp">close</span></button>
+  </div>
+
+  <div class="veh">
+    <span class="veh-name" id="vehName">—</span>
+    <span class="veh-plate" id="vehPlate">———————</span>
+    <span class="pi-chip" id="piChip">PI: —</span>
+    <div class="heat-wrap">
+      <span class="heat-label">HEAT</span>
+      <div class="heat-bar-track">
+        <div class="heat-bar-fill" id="heatBar" style="width:0%"></div>
+      </div>
+      <span class="heat-val" id="heatVal" style="color:var(--green)">0%</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('parts',this)">
+      <span class="material-symbols-sharp">settings_input_component</span>Parts
+    </div>
+    <div class="tab" onclick="switchTab('diagnostics',this)">
+      <span class="material-symbols-sharp">health_and_safety</span>Diagnostics
+    </div>
+    <div class="tab" onclick="switchTab('drivetrain',this)">
+      <span class="material-symbols-sharp">settings_motion_mode</span>Drivetrain
+    </div>
+  </div>
+
+  <div class="panels">
+    <!-- Parts Tab -->
+    <div class="panel active" id="panel-parts">
+      <div class="instab-warn" id="instabWarn" style="display:none">
+        <span class="material-symbols-sharp">warning</span>
+        <span id="instabText">Instability detected from illegal parts. Vehicle may be unpredictable.</span>
+      </div>
+      <div class="parts-grid" id="partsGrid"></div>
+    </div>
+
+    <!-- Diagnostics Tab -->
+    <div class="panel" id="panel-diagnostics">
+      <div class="diag-grid" id="diagGrid"></div>
+      <div id="repairList"></div>
+    </div>
+
+    <!-- Drivetrain Tab -->
+    <div class="panel" id="panel-drivetrain">
+      <div id="drivetrainPanel"></div>
+    </div>
+  </div>
+
+  <div class="ftr">
+    <span class="ftr-hint" id="totalBonusDisplay">Bonuses: —</span>
+    <button class="btn btn-ghost" onclick="closeNUI()">
+      <span class="material-symbols-sharp">close</span>Close
+    </button>
+  </div>
+</div>
+<script src="script.js"></script>
 </body>
 </html>

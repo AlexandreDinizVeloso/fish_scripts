@@ -1,222 +1,567 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FISH Telemetry</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FISH Telemetry — OBD-III</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #070810;
+    --bg2:      #0d0e1a;
+    --bg3:      #131528;
+    --glass:    rgba(255,255,255,0.03);
+    --border:   rgba(255,255,255,0.07);
+    --cyan:     #00d4ff;
+    --orange:   #ff6b00;
+    --green:    #00ff88;
+    --red:      #ff1744;
+    --purple:   #a855f7;
+    --yellow:   #ffd600;
+    --text:     #e8eaf6;
+    --muted:    rgba(232,234,246,0.4);
+    --mono:     'Share Tech Mono', monospace;
+    --sans:     'Space Grotesk', sans-serif;
+    --orb:      'Orbitron', sans-serif;
+  }
+  body {
+    font-family: var(--sans);
+    background: transparent;
+    color: var(--text);
+    height: 100vh;
+    width: 100vw;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  body.visible { display: flex; }
+
+  /* ── Main Container ── */
+  .tele-wrap {
+    width: 820px;
+    background: linear-gradient(145deg, #0d0f1e 0%, #080916 100%);
+    border: 1px solid rgba(0,212,255,0.15);
+    border-radius: 16px;
+    box-shadow: 0 0 60px rgba(0,212,255,0.06), inset 0 1px 0 rgba(255,255,255,0.05);
+    overflow: hidden;
+    backdrop-filter: blur(40px);
+  }
+
+  /* ── Header ── */
+  .tele-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px 14px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,212,255,0.04);
+  }
+  .tele-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tele-logo-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--cyan) 0%, var(--purple) 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .tele-logo h1 {
+    font-family: var(--orb);
+    font-size: 14px;
+    letter-spacing: 3px;
+    color: var(--cyan);
+  }
+  .tele-logo span {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin-left: 4px;
+  }
+  .tele-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .rec-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,23,68,0.12);
+    border: 1px solid rgba(255,23,68,0.3);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--red);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .rec-badge.active { opacity: 1; }
+  .rec-dot {
+    width: 7px; height: 7px;
+    background: var(--red);
+    border-radius: 50%;
+    animation: pulse-red 1s infinite;
+  }
+  @keyframes pulse-red {
+    0%,100% { opacity:1; box-shadow: 0 0 4px var(--red); }
+    50% { opacity:0.3; box-shadow: none; }
+  }
+  .btn-close {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    width: 30px; height: 30px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+  }
+  .btn-close:hover { background: rgba(255,23,68,0.15); color: var(--red); border-color: rgba(255,23,68,0.4); }
+
+  /* ── Vehicle Info Strip ── */
+  .veh-strip {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.01);
+  }
+  .veh-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .veh-plate {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 5px;
+    padding: 2px 8px;
+    color: var(--muted);
+    letter-spacing: 2px;
+  }
+  .veh-pi {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--cyan);
+  }
+  .version-pills {
+    display: flex;
+    gap: 6px;
+  }
+  .version-pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .version-pill.active {
+    background: rgba(0,212,255,0.12);
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  .version-pill.v2 { --vc: var(--orange); }
+  .version-pill.v3 { --vc: var(--purple); }
+  .version-pill.v4 { --vc: var(--green); }
+  .version-pill.active.v2 { background: rgba(255,107,0,0.12); border-color: var(--orange); color: var(--orange); }
+  .version-pill.active.v3 { background: rgba(168,85,247,0.12); border-color: var(--purple); color: var(--purple); }
+  .version-pill.active.v4 { background: rgba(0,255,136,0.12); border-color: var(--green); color: var(--green); }
+
+  /* ── Main Grid ── */
+  .tele-body {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 0;
+    min-height: 340px;
+  }
+
+  /* ── Speedometer Column ── */
+  .speedo-col {
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .speedo-arc-wrap {
+    position: relative;
+    width: 200px;
+    height: 120px;
+    overflow: visible;
+  }
+  .speedo-arc-wrap svg {
+    width: 200px;
+    height: 120px;
+    overflow: visible;
+  }
+  .speedo-track { stroke: rgba(255,255,255,0.06); fill: none; stroke-width: 14; stroke-linecap: round; }
+  .speedo-fill  { stroke: var(--cyan); fill: none; stroke-width: 14; stroke-linecap: round; transition: stroke-dashoffset 0.1s linear, stroke 0.3s; }
+  .speedo-speed {
+    position: absolute;
+    bottom: -10px;
+    left: 50%; transform: translateX(-50%);
+    text-align: center;
+  }
+  .speedo-val {
+    font-family: var(--orb);
+    font-size: 38px;
+    font-weight: 900;
+    color: var(--cyan);
+    line-height: 1;
+    text-shadow: 0 0 20px rgba(0,212,255,0.5);
+    transition: color 0.2s;
+  }
+  .speedo-unit {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+  }
+
+  /* G-Force Bar */
+  .gforce-wrap {
+    width: 100%;
+  }
+  .gforce-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .gforce-val {
+    font-size: 13px;
+    color: var(--purple);
+    font-weight: 600;
+  }
+  .gforce-bar-track {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .gforce-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--purple), #e879f9);
+    border-radius: 3px;
+    transition: width 0.1s;
+    box-shadow: 0 0 8px rgba(168,85,247,0.5);
+  }
+
+  /* Mini Stats */
+  .mini-stats {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .mini-stat {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .mini-stat-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .mini-stat-val {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--cyan);
+    margin-top: 2px;
+  }
+
+  /* ── Results Column ── */
+  .results-col {
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .results-table-wrap {
+    overflow-x: auto;
+  }
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .results-table thead th {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-table thead th:first-child { text-align: left; }
+  .results-table thead .ver-col {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+  }
+  .results-table tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    transition: background 0.15s;
+  }
+  .results-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .results-table tbody td {
+    padding: 8px 10px;
+    text-align: center;
+    color: var(--text);
+  }
+  .results-table tbody td:first-child {
+    text-align: left;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .cell-best {
+    color: var(--green) !important;
+    font-weight: 600;
+  }
+  .cell-na { color: rgba(255,255,255,0.2) !important; }
+  .measuring { color: var(--orange) !important; animation: blink 0.6s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Footer ── */
+  .tele-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 22px;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,0.01);
+  }
+  .tele-hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .tele-hint kbd {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+  }
+  .footer-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .btn-ghost {
+    background: rgba(255,255,255,0.04);
+    border-color: var(--border);
+    color: var(--muted);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .btn-cyan {
+    background: rgba(0,212,255,0.1);
+    border-color: rgba(0,212,255,0.4);
+    color: var(--cyan);
+  }
+  .btn-cyan:hover { background: rgba(0,212,255,0.2); }
+  .btn-red {
+    background: rgba(255,23,68,0.1);
+    border-color: rgba(255,23,68,0.4);
+    color: var(--red);
+  }
+  .btn-red:hover { background: rgba(255,23,68,0.2); }
+  .material-symbols-sharp { font-size: 16px !important; }
+
+  /* Idle screen */
+  .idle-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 50px 20px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .idle-screen .idle-icon {
+    font-size: 40px;
+    color: rgba(0,212,255,0.3);
+  }
+  .idle-screen h2 {
+    font-family: var(--orb);
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: rgba(0,212,255,0.5);
+  }
+  .idle-screen p {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 300px;
+    line-height: 1.6;
+  }
+</style>
 </head>
 <body>
-    <div id="app" class="hidden">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-left">
-                <div class="logo">
-                    <span class="logo-icon">◆</span>
-                    <span class="logo-text">FISH TELEMETRY</span>
-                </div>
-                <div class="vehicle-info">
-                    <span id="vehicleName" class="vehicle-name">No Vehicle</span>
-                    <span id="vehiclePlate" class="vehicle-plate">---</span>
-                </div>
-            </div>
-            <div class="header-right">
-                <div id="recordingIndicator" class="recording-indicator">
-                    <span class="rec-dot"></span>
-                    <span class="rec-text">REC</span>
-                </div>
-                <button id="btnClose" class="btn-close" title="Close">✕</button>
-            </div>
-        </header>
+<div class="tele-wrap">
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Speedometer Section -->
-            <section class="speedometer-section">
-                <div class="speed-display">
-                    <div class="speed-value-container">
-                        <span id="currentSpeed" class="speed-value">0</span>
-                        <span class="speed-unit">km/h</span>
-                    </div>
-                    <div class="speed-bar-track">
-                        <div id="speedBar" class="speed-bar-fill"></div>
-                    </div>
-                    <div class="speed-labels">
-                        <span>0</span>
-                        <span>100</span>
-                        <span>200</span>
-                        <span>300</span>
-                        <span>400+</span>
-                    </div>
-                </div>
-                <div class="max-speed-display">
-                    <span class="max-speed-label">MAX</span>
-                    <span id="maxSpeed" class="max-speed-value">0</span>
-                    <span class="max-speed-unit">km/h</span>
-                </div>
-            </section>
+  <!-- Header -->
+  <div class="tele-header">
+    <div class="tele-logo">
+      <div class="tele-logo-icon">
+        <span class="material-symbols-sharp">speed</span>
+      </div>
+      <div>
+        <h1>TELEMETRY</h1>
+        <span>OBD-III MODULE</span>
+      </div>
+    </div>
+    <div class="tele-header-right">
+      <div class="rec-badge" id="recBadge">
+        <div class="rec-dot"></div>
+        REC
+      </div>
+      <button class="btn-close" onclick="closeNUI()">
+        <span class="material-symbols-sharp">close</span>
+      </button>
+    </div>
+  </div>
 
-            <!-- Stats Grid -->
-            <section class="stats-grid">
-                <!-- 0-100 -->
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-label">0-100 km/h</span>
-                        <span class="stat-icon">⚡</span>
-                    </div>
-                    <div class="stat-values">
-                        <div class="stat-best">
-                            <span class="stat-best-label">BEST</span>
-                            <span id="best0_100" class="stat-number best">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                        <div class="stat-last">
-                            <span class="stat-last-label">LAST</span>
-                            <span id="last0_100" class="stat-number last">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                    </div>
-                    <div class="stat-bar-track">
-                        <div id="bar0_100" class="stat-bar-fill accent-blue"></div>
-                    </div>
-                </div>
+  <!-- Vehicle Info -->
+  <div class="veh-strip" id="vehStrip">
+    <span class="veh-name" id="vehName">—</span>
+    <span class="veh-plate" id="vehPlate">XXXXXXX</span>
+    <div class="version-pills" id="versionPills"></div>
+    <span class="veh-pi" id="vehPi">PI: —</span>
+  </div>
 
-                <!-- 0-200 -->
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-label">0-200 km/h</span>
-                        <span class="stat-icon">🚀</span>
-                    </div>
-                    <div class="stat-values">
-                        <div class="stat-best">
-                            <span class="stat-best-label">BEST</span>
-                            <span id="best0_200" class="stat-number best">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                        <div class="stat-last">
-                            <span class="stat-last-label">LAST</span>
-                            <span id="last0_200" class="stat-number last">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                    </div>
-                    <div class="stat-bar-track">
-                        <div id="bar0_200" class="stat-bar-fill accent-blue"></div>
-                    </div>
-                </div>
+  <!-- Main Body -->
+  <div class="tele-body">
 
-                <!-- 100-0 -->
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-label">100-0 km/h</span>
-                        <span class="stat-icon">🛑</span>
-                    </div>
-                    <div class="stat-values">
-                        <div class="stat-best">
-                            <span class="stat-best-label">BEST</span>
-                            <span id="best100_0" class="stat-number best">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                        <div class="stat-last">
-                            <span class="stat-last-label">LAST</span>
-                            <span id="last100_0" class="stat-number last">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                    </div>
-                    <div class="stat-bar-track">
-                        <div id="bar100_0" class="stat-bar-fill accent-green"></div>
-                    </div>
-                </div>
-
-                <!-- 200-0 -->
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-label">200-0 km/h</span>
-                        <span class="stat-icon">🔴</span>
-                    </div>
-                    <div class="stat-values">
-                        <div class="stat-best">
-                            <span class="stat-best-label">BEST</span>
-                            <span id="best200_0" class="stat-number best">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                        <div class="stat-last">
-                            <span class="stat-last-label">LAST</span>
-                            <span id="last200_0" class="stat-number last">--</span>
-                            <span class="stat-suffix">s</span>
-                        </div>
-                    </div>
-                    <div class="stat-bar-track">
-                        <div id="bar200_0" class="stat-bar-fill accent-green"></div>
-                    </div>
-                </div>
-
-                <!-- Lateral G -->
-                <div class="stat-card stat-card-wide">
-                    <div class="stat-header">
-                        <span class="stat-label">Lateral G-Force</span>
-                        <span class="stat-icon">🔄</span>
-                    </div>
-                    <div class="stat-values">
-                        <div class="stat-best">
-                            <span class="stat-best-label">BEST</span>
-                            <span id="bestGforce" class="stat-number best">--</span>
-                            <span class="stat-suffix">G</span>
-                        </div>
-                        <div class="stat-last">
-                            <span class="stat-last-label">LAST</span>
-                            <span id="lastGforce" class="stat-number last">--</span>
-                            <span class="stat-suffix">G</span>
-                        </div>
-                    </div>
-                    <div class="stat-bar-track">
-                        <div id="barGforce" class="stat-bar-fill accent-purple"></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Version Comparison -->
-            <section id="versionSection" class="version-section hidden">
-                <h3 class="section-title">Version Comparison</h3>
-                <div class="version-table-wrapper">
-                    <table class="version-table">
-                        <thead>
-                            <tr>
-                                <th>Ver</th>
-                                <th>Max Speed</th>
-                                <th>0-100</th>
-                                <th>0-200</th>
-                                <th>100-0</th>
-                                <th>200-0</th>
-                                <th>Lat G</th>
-                            </tr>
-                        </thead>
-                        <tbody id="versionTableBody">
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- Info Section -->
-            <section class="info-section">
-                <p class="info-text">Press <strong>G</strong> to start/stop recording</p>
-            </section>
-
-            <!-- Nearby Ratings (shown when holding K) -->
-            <section id="nearbyRatings" class="nearby-ratings hidden">
-                <h3 class="section-title">Nearby Vehicle Ratings</h3>
-                <div id="ratingsList" class="ratings-list">
-                    <p class="no-data">No nearby vehicles with telemetry data</p>
-                </div>
-            </section>
-        </main>
-
-        <!-- Toast notification -->
-        <div id="toast" class="toast hidden">
-            <span id="toastText"></span>
+    <!-- Speedometer Column -->
+    <div class="speedo-col">
+      <div class="speedo-arc-wrap">
+        <svg viewBox="0 0 200 120">
+          <path class="speedo-track"
+            d="M 18 100 A 82 82 0 0 1 182 100"
+          />
+          <path class="speedo-fill" id="speedoArc"
+            d="M 18 100 A 82 82 0 0 1 182 100"
+            style="stroke-dasharray:258; stroke-dashoffset:258;"
+          />
+        </svg>
+        <div class="speedo-speed">
+          <div class="speedo-val" id="speedVal">0</div>
+          <div class="speedo-unit">KM/H</div>
         </div>
+      </div>
+
+      <div class="gforce-wrap">
+        <div class="gforce-label">
+          <span>LATERAL G</span>
+          <span class="gforce-val" id="gforceVal">0.00G</span>
+        </div>
+        <div class="gforce-bar-track">
+          <div class="gforce-bar-fill" id="gforceBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="mini-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-label">MAX SPEED</div>
+          <div class="mini-stat-val" id="maxSpeedVal">—</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-label">BEST G</div>
+          <div class="mini-stat-val" id="bestGVal">—</div>
+        </div>
+      </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- Results Column -->
+    <div class="results-col" id="resultsCol">
+      <div class="idle-screen" id="idleScreen">
+        <span class="material-symbols-sharp idle-icon">speed</span>
+        <h2>READY TO RECORD</h2>
+        <p>Press <strong>G</strong> in-vehicle to start recording. The system will automatically detect multiple tuning versions within a session.</p>
+      </div>
+
+      <div id="liveResults" style="display:none;">
+        <div class="results-table-wrap">
+          <table class="results-table" id="resultsTable">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="tele-footer">
+    <div class="tele-hint">
+      <kbd>G</kbd> Start/Stop &nbsp;·&nbsp; <kbd>ESC</kbd> Close
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-ghost" id="btnCopy" onclick="copyClipboard()">
+        <span class="material-symbols-sharp">content_copy</span>
+        Copy Results
+      </button>
+      <button class="btn btn-red" id="btnStop" onclick="stopRecording()" style="display:none">
+        <span class="material-symbols-sharp">stop_circle</span>
+        Stop
+      </button>
+      <button class="btn btn-cyan" id="btnStart" onclick="startRecording()">
+        <span class="material-symbols-sharp">fiber_manual_record</span>
+        Record
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>

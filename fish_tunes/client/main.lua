@@ -3,6 +3,43 @@ local isNuiOpen = false
 local currentVehicle = nil
 local tunesData = {}
 
+-- ============================================================
+-- Entity State Bag: React to HEAT changes pushed by server
+-- ============================================================
+AddStateBagChangeHandler('fish:heat', nil, function(bagName, key, value, _, replicated)
+    if not value then return end
+    local netId = tonumber(bagName:gsub('entity:', ''), 10)
+    if not netId then return end
+    -- Update NUI if open and this is our current vehicle
+    if isNuiOpen and currentVehicle then
+        local veh = NetworkGetEntityFromNetworkId(netId)
+        if veh == currentVehicle then
+            SendNUIMessage({ action = 'updateHeat', heat = value })
+        end
+    end
+end)
+
+-- ============================================================
+-- Entity State Bag: Apply handling changes (from normalizer/remaps/tunes)
+-- ============================================================
+AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, replicated)
+    if not value then return end
+    local netId = tonumber(bagName:gsub('entity:', ''), 10)
+    if not netId then return end
+    Citizen.CreateThread(function()
+        local veh = NetworkGetEntityFromNetworkId(netId)
+        local attempts = 0
+        while not DoesEntityExist(veh) and attempts < 20 do
+            Citizen.Wait(100)
+            veh = NetworkGetEntityFromNetworkId(netId)
+            attempts = attempts + 1
+        end
+        if DoesEntityExist(veh) then
+            exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+        end
+    end)
+end)
+
 -- Expose tunesData for other client scripts
 function GetTunesDataForPlate(plate)
     return tunesData[plate]
@@ -99,6 +136,20 @@ RegisterCommand('tunes', function()
     if isNuiOpen then return end
     OpenTunes()
 end, false)
+
+-- ============================================================
+-- Request tunes data for current vehicle on spawn
+-- ============================================================
+AddEventHandler('QBCore:Client:OnPlayerLoaded', function()
+    Citizen.CreateThread(function()
+        Citizen.Wait(2000)
+        local vehicle = GetCurrentVehicle()
+        if vehicle then
+            local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
+            TriggerServerEvent('fish_tunes:requestData', plate)
+        end
+    end)
+end)
 
 -- ============================================================
 -- Open NUI with full data
@@ -223,20 +274,17 @@ end)
 RegisterNUICallback('convertDrivetrain', function(data, cb)
     if not currentVehicle then cb({success = false}); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-
-    TriggerServerEvent('fish_tunes:convertDrivetrainServer', plate, data.drivetrain)
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_tunes:convertDrivetrain', plate, data.drivetrain, netId)
     cb({success = true})
 end)
 
 RegisterNUICallback('installPart', function(data, cb)
     if not currentVehicle then cb({success = false}); return end
-
-    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    local category = data.category
-    local level = data.level
-
-    -- Request server to install (handles cost check)
-    TriggerServerEvent('fish_tunes:installPartServer', plate, category, level)
+    local plate  = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    local netId  = NetworkGetNetworkIdFromEntity(currentVehicle)
+    -- Updated: send to new server event name with netId for state bag push
+    TriggerServerEvent('fish_tunes:installPart', plate, data.category, data.level, netId)
     cb({success = true})
 end)
 
@@ -271,35 +319,60 @@ RegisterNUICallback('previewPart', function(data, cb)
 end)
 
 RegisterNUICallback('craftPart', function(data, cb)
-    TriggerServerEvent('fish_tunes:craftPartServer', data.recipeId)
+    TriggerServerEvent('fish_tunes:craftPart', data.recipeId)
     cb({success = true})
 end)
 
 RegisterNUICallback('classSwap', function(data, cb)
     if not currentVehicle then cb({success = false}); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_tunes:swapClassServer', plate, data.targetClass)
+    TriggerServerEvent('fish_tunes:swapClass', plate, data.targetClass)
     cb({success = true})
 end)
 
 RegisterNUICallback('repairVehicle', function(data, cb)
     if not currentVehicle then cb({success = false}); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_tunes:repairVehicleServer', plate, data.partType or 'all')
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_tunes:repairVehicle', plate, data.partType or 'all', netId)
     cb({success = true})
 end)
 
 RegisterNUICallback('setTransmissionMode', function(data, cb)
     if not currentVehicle then cb({success = false}); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_tunes:setTransmissionModeServer', plate, data.mode)
+    TriggerServerEvent('fish_tunes:setTransmissionMode', plate, data.mode)
     cb({success = true})
 end)
 
 RegisterNUICallback('setGearRatio', function(data, cb)
     if not currentVehicle then cb({success = false}); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_tunes:setGearRatioServer', plate, data.preset)
+    TriggerServerEvent('fish_tunes:setGearRatio', plate, data.preset)
+    cb({success = true})
+end)
+
+RegisterNUICallback('applyTireCompound', function(data, cb)
+    if not currentVehicle then cb({success = false}); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_tunes:applyTireCompound', plate, data.compound, netId)
+    cb({success = true})
+end)
+
+RegisterNUICallback('toggleVehicleFlag', function(data, cb)
+    if not currentVehicle then cb({success = false}); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_tunes:toggleVehicleFlag', plate, data.flagKey, netId)
+    cb({success = true})
+end)
+
+RegisterNUICallback('saveECUTune', function(data, cb)
+    if not currentVehicle then cb({success = false}); return end
+    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_tunes:saveECUTune', plate, data.ecuData, netId)
     cb({success = true})
 end)
 
@@ -308,29 +381,43 @@ end)
 -- ============================================================
 
 RegisterNetEvent('fish_tunes:receiveData')
-AddEventHandler('fish_tunes:receiveData', function(data)
-    if data then tunesData = data end
+AddEventHandler('fish_tunes:receiveData', function(plate, data)
+    -- Updated: now receives plate + data (not whole cache)
+    if plate and data then
+        tunesData[plate] = data
+    end
 end)
 
 RegisterNetEvent('fish_tunes:clientNotify')
 AddEventHandler('fish_tunes:clientNotify', function(msg)
-    ShowNotification(msg)
+    if type(msg) == 'table' then
+        ShowNotification(msg.message or '')
+    else
+        ShowNotification(msg)
+    end
 end)
 
 RegisterNetEvent('fish_tunes:partInstalled')
-AddEventHandler('fish_tunes:partInstalled', function(plate, category, level, totalBonuses, heat)
-    if tunesData[plate] then
+AddEventHandler('fish_tunes:partInstalled', function(result)
+    -- Updated: now receives a single result table
+    local plate    = result.plate
+    local category = result.category
+    local level    = result.level
+    if plate then
+        if not tunesData[plate] then tunesData[plate] = {} end
         if not tunesData[plate].parts then tunesData[plate].parts = {} end
         tunesData[plate].parts[category] = level
+        tunesData[plate].heat = result.heat or 0
     end
     -- Update NUI if open
     if isNuiOpen then
         SendNUIMessage({
-            action = 'partInstalled',
-            category = category,
-            level = level,
-            totalBonuses = totalBonuses,
-            currentHeat = heat
+            action       = 'partInstalled',
+            category     = category,
+            level        = level,
+            totalBonuses = result.bonuses,
+            instability  = result.instability,
+            currentHeat  = result.heat
         })
     end
 end)
@@ -371,7 +458,14 @@ end)
 -- ============================================================
 
 Citizen.CreateThread(function()
-    TriggerServerEvent('fish_tunes:requestData')
+    -- Request on spawn handled by OnPlayerLoaded above
+    -- Also request on resource start (if already loaded)
+    Citizen.Wait(3000)
+    local vehicle = GetCurrentVehicle()
+    if vehicle then
+        local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
+        TriggerServerEvent('fish_tunes:requestData', plate)
+    end
 end)
 
 -- HEAT decay

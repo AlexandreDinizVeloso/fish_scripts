@@ -1,472 +1,328 @@
 -- ============================================================
--- FISH HUB - Server Main
+-- fish_hub: Server Main
+-- Marketplace, Chat (global + DM), HEAT ranking,
+-- Chip management, weekly cleanup, police trigger hook.
 -- ============================================================
 
-local function GetSafePlayerName(src)
-    return GetPlayerName(src) or 'Player_' .. src
-end
-
-local function DebugPrint(msg)
-    print('[FISH HUB Server] ' .. tostring(msg))
-end
-
-local function PlayerHasChipType(src, chipType)
-    local chips = DataStore.GetPlayerChips(src)
-    for _, chip in ipairs(chips) do
-        if chip.type == chipType then return true end
-    end
-    return false
-end
-
-local function PlayerHasV1(src)
-    return PlayerHasChipType(src, 'v1') or PlayerHasChipType(src, 'v2')
-end
-
-local function PlayerHasV2(src)
-    return PlayerHasChipType(src, 'v2')
-end
+local DB = nil
+local connectedClients = {}  -- { [identifier] = src }
+local weeklyCleanupTimer = 7 * 24 * 60 * 60  -- 7 days in seconds
 
 -- ============================================================
--- Initialization
+-- Startup
 -- ============================================================
 
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    DataStore.LoadAll()
-    DebugPrint('Resource started, data loaded.')
+    DB = FishDB
+    if not DB then
+        print('[fish_hub] ERROR: FishDB not available. Is fish_normalizer running?')
+        return
+    end
+    -- Clean expired listings on start
+    DB.CleanExpiredListings()
+    DB.CleanOldMessages()
 
+    print('[fish_hub] Started.')
+
+    -- Weekly cleanup timer
     Citizen.CreateThread(function()
         while true do
-            Citizen.Wait(300000)
-            DataStore.CleanExpiredListings()
+            Citizen.Wait(weeklyCleanupTimer * 1000)
+            DB.CleanExpiredListings()
+            DB.CleanOldMessages()
+            print('[fish_hub] Weekly cleanup completed.')
         end
     end)
 end)
 
-AddEventHandler('onResourceStop', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then return end
-    DataStore.SaveAll()
-    DebugPrint('Resource stopping, data saved.')
-end)
-
 -- ============================================================
--- Request Data (full sync to client)
+-- Helpers
 -- ============================================================
 
-RegisterNetEvent('fish_hub:requestData')
-AddEventHandler('fish_hub:requestData', function()
+local function GetIdentifier(src)
+    return GetPlayerIdentifier(src, 0) or ('player:' .. src)
+end
+
+local function GetPlayerName_Safe(src)
+    return GetPlayerName(src) or 'Unknown'
+end
+
+-- Build private DM channel key (always sorted alphabetically for consistency)
+local function DMChannel(identA, identB)
+    local ids = {identA, identB}
+    table.sort(ids)
+    return 'dm:' .. ids[1] .. ':' .. ids[2]
+end
+
+-- ============================================================
+-- Hub Open / Chip Management
+-- ============================================================
+
+RegisterNetEvent('fish_hub:open')
+AddEventHandler('fish_hub:open', function()
     local src = source
-    TriggerClientEvent('fish_hub:receiveData', src, {
-        chips     = DataStore.GetPlayerChips(src),
-        listings  = DataStore.GetListings(),
-        messages  = DataStore.GetMessages(),
-        heat      = DataStore.GetHeatData(),
-        ranking   = DataStore.GetHeatRanking(),
-        profile   = DataStore.GetProfile(src),
-        channels  = DataStore.GetPlayerChannels(src)
+    local identifier = GetIdentifier(src)
+
+    -- Track client
+    connectedClients[identifier] = src
+
+    -- Get player's chips from QBX metadata
+    local player = exports.qbx_core:GetPlayer(src)
+    local chips = { v1 = false, v2 = false }
+    if player then
+        local meta = player.PlayerData.metadata or {}
+        chips.v1 = meta.fish_chip_v1 or false
+        chips.v2 = meta.fish_chip_v2 or false
+    end
+
+    -- Get player's vehicle HEAT if in vehicle
+    local heatData = {}
+    local ped = GetPlayerPed(src)
+    if IsPedInAnyVehicle(ped, false) then
+        local veh   = GetVehiclePedIsIn(ped, false)
+        local plate = GetVehicleNumberPlateText(veh):gsub('%s+', '')
+        local heat  = exports['fish_tunes']:GetHeatLevel(plate)
+        heatData[plate] = heat
+    end
+
+    TriggerClientEvent('fish_hub:opened', src, {
+        chips    = chips,
+        heatData = heatData,
+        name     = GetPlayerName_Safe(src)
     })
 end)
 
--- ============================================================
--- Profile System
--- ============================================================
-
-RegisterNetEvent('fish_hub:updateProfile')
-AddEventHandler('fish_hub:updateProfile', function(data)
+RegisterNetEvent('fish_hub:close')
+AddEventHandler('fish_hub:close', function()
     local src = source
-    if not data then
-        TriggerClientEvent('fish_hub:notification', src, 'Missing profile data.', 'error')
-        return
-    end
-
-    if data.username and #data.username > 32 then
-        TriggerClientEvent('fish_hub:notification', src, 'Username too long (max 32).', 'error')
-        return
-    end
-
-    if data.profilePic and #data.profilePic > 512 then
-        TriggerClientEvent('fish_hub:notification', src, 'URL too long (max 512).', 'error')
-        return
-    end
-
-    DataStore.UpdateProfile(src, data)
-    TriggerClientEvent('fish_hub:notification', src, 'Profile updated.', 'success')
-    TriggerClientEvent('fish_hub:profileUpdated', src, DataStore.GetProfile(src))
+    local identifier = GetIdentifier(src)
+    connectedClients[identifier] = nil
 end)
 
 -- ============================================================
--- Chat System
+-- Chip Installation (dev: free, no item check)
 -- ============================================================
 
-RegisterNetEvent('fish_hub:sendMessage')
-AddEventHandler('fish_hub:sendMessage', function(channel, message)
-    local src = source
+RegisterNetEvent('fish_hub:installChip')
+AddEventHandler('fish_hub:installChip', function(chipType)
+    local src    = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
 
-    if not message or message == '' or #message > 500 then
-        TriggerClientEvent('fish_hub:notification', src, 'Invalid message.', 'error')
+    -- Validate chip type
+    if chipType ~= 'v1' and chipType ~= 'v2' then
+        TriggerClientEvent('fish_hub:notify', src, {type='error', message='Invalid chip type.'})
         return
     end
 
-    -- Validate channel exists and player has access
-    local playerChannels = DataStore.GetPlayerChannels(src)
-    if not playerChannels[channel] then
-        TriggerClientEvent('fish_hub:notification', src, 'No access to this channel.', 'error')
-        return
-    end
-
-    local playerName = GetSafePlayerName(src)
-    local profile = DataStore.GetProfile(src)
-    if profile.username and profile.username ~= '' then
-        playerName = profile.username
-    end
-
-    local msg = DataStore.AddMessage(src, playerName, channel, message)
-
-    -- Broadcast to all players who have access to this channel
-    local players = GetPlayers()
-    for _, pid in ipairs(players) do
-        local pidNum = tonumber(pid)
-        local pChannels = DataStore.GetPlayerChannels(pidNum)
-        if pChannels[channel] then
-            TriggerClientEvent('fish_hub:newMessage', pidNum, msg)
+    -- V2 requires V1
+    if chipType == 'v2' then
+        local meta = player.PlayerData.metadata or {}
+        if not meta.fish_chip_v1 then
+            TriggerClientEvent('fish_hub:notify', src, {type='error', message='You need a V1 chip installed first.'})
+            return
         end
     end
-end)
 
-RegisterNetEvent('fish_hub:createChannel')
-AddEventHandler('fish_hub:createChannel', function(name)
-    local src = source
-    if not name or name == '' or #name > 32 then
-        TriggerClientEvent('fish_hub:notification', src, 'Invalid channel name (max 32).', 'error')
-        return
-    end
+    -- Set metadata
+    local metaKey = 'fish_chip_' .. chipType
+    player.Functions.SetMetaData(metaKey, true)
 
-    local channelId = DataStore.CreateChannel(src, name)
-    TriggerClientEvent('fish_hub:notification', src, 'Channel created: ' .. name, 'success')
-    TriggerClientEvent('fish_hub:channelsUpdated', src, DataStore.GetPlayerChannels(src))
-end)
-
-RegisterNetEvent('fish_hub:inviteToChannel')
-AddEventHandler('fish_hub:inviteToChannel', function(channelId, targetId)
-    local src = source
-
-    if not channelId or not targetId then
-        TriggerClientEvent('fish_hub:notification', src, 'Missing channel or target.', 'error')
-        return
-    end
-
-    -- Verify the inviter is a member of the channel
-    local playerChannels = DataStore.GetPlayerChannels(src)
-    if not playerChannels[channelId] then
-        TriggerClientEvent('fish_hub:notification', src, 'You are not in this channel.', 'error')
-        return
-    end
-
-    local success, msg = DataStore.InviteToChannel(channelId, targetId)
-    if success then
-        TriggerClientEvent('fish_hub:notification', src, 'Player invited.', 'success')
-        TriggerClientEvent('fish_hub:notification', targetId, 'You were invited to a channel!', 'info')
-        -- Refresh channels for the invited player
-        TriggerClientEvent('fish_hub:channelsUpdated', targetId, DataStore.GetPlayerChannels(targetId))
-    else
-        TriggerClientEvent('fish_hub:notification', src, msg, 'error')
-    end
+    TriggerClientEvent('fish_hub:chipInstalled', src, chipType)
+    TriggerClientEvent('fish_hub:notify', src, {
+        type    = 'success',
+        message = ('Chip %s installed successfully!'):format(chipType:upper())
+    })
 end)
 
 -- ============================================================
 -- Marketplace
 -- ============================================================
 
+RegisterNetEvent('fish_hub:getListings')
+AddEventHandler('fish_hub:getListings', function(isIllegal)
+    local src = source
+
+    -- V2 required for illegal listings
+    if isIllegal then
+        local player = exports.qbx_core:GetPlayer(src)
+        local meta   = player and player.PlayerData.metadata or {}
+        if not meta.fish_chip_v2 then
+            TriggerClientEvent('fish_hub:notify', src, {type='error', message='V2 chip required for illegal marketplace.'})
+            return
+        end
+    end
+
+    local listings = DB.GetListings(isIllegal)
+    TriggerClientEvent('fish_hub:receiveListings', src, listings, isIllegal)
+end)
+
 RegisterNetEvent('fish_hub:createListing')
 AddEventHandler('fish_hub:createListing', function(data)
-    local src = source
+    local src        = source
+    local identifier = GetIdentifier(src)
+    local playerName = GetPlayerName_Safe(src)
+    local player     = exports.qbx_core:GetPlayer(src)
+    local meta       = player and player.PlayerData.metadata or {}
 
-    if not data or not data.name or not data.price then
-        TriggerClientEvent('fish_hub:notification', src, 'Missing listing data.', 'error')
+    -- Validate chip
+    if data.is_illegal and not meta.fish_chip_v2 then
+        TriggerClientEvent('fish_hub:notify', src, {type='error', message='V2 chip required to post illegal listings.'})
+        return
+    end
+    if not data.is_illegal and not meta.fish_chip_v1 then
+        TriggerClientEvent('fish_hub:notify', src, {type='error', message='V1 chip required to post listings.'})
         return
     end
 
-    -- Check V2 for illegal listings
-    if data.listingType == 'illegal' and not PlayerHasV2(src) then
-        TriggerClientEvent('fish_hub:notification', src, 'V2 chip required for illegal listings.', 'error')
-        return
-    end
+    -- Sanitize
+    data.seller_identifier = identifier
+    data.seller_name       = playerName
+    data.description       = (data.description or ''):sub(1, 300)
 
-    local profile = DataStore.GetProfile(src)
-    data.sellerName = (profile.username and profile.username ~= '') and profile.username or GetSafePlayerName(src)
+    local id = DB.CreateListing(data)
 
-    local success, result = DataStore.CreateListing(src, data)
-    if success then
-        TriggerClientEvent('fish_hub:notification', src, 'Listing created: ' .. data.name, 'success')
-        local listings = DataStore.GetListings()
-        TriggerClientEvent('fish_hub:listingUpdate', -1, listings)
-    else
-        TriggerClientEvent('fish_hub:notification', src, 'Failed: ' .. tostring(result), 'error')
-    end
-end)
-
-RegisterNetEvent('fish_hub:acceptListing')
-AddEventHandler('fish_hub:acceptListing', function(listingId)
-    local src = source
-    local success, listing = DataStore.AcceptListing(src, listingId)
-    if success then
-        TriggerClientEvent('fish_hub:notification', src, 'Purchase accepted: ' .. listing.name, 'success')
-        if listing.sellerId then
-            TriggerClientEvent('fish_hub:notification', listing.sellerId, 'Your listing "' .. listing.name .. '" was purchased!', 'success')
-        end
-        TriggerClientEvent('fish_hub:listingUpdate', -1, DataStore.GetListings())
-    else
-        TriggerClientEvent('fish_hub:notification', src, 'Failed: ' .. tostring(listing), 'error')
-    end
-end)
-
-RegisterNetEvent('fish_hub:contactSeller')
-AddEventHandler('fish_hub:contactSeller', function(listingId, sellerId)
-    local src = source
-
-    if not PlayerHasV1(src) then
-        TriggerClientEvent('fish_hub:notification', src, 'V1 chip required to contact sellers.', 'error')
-        return
-    end
-
-    if not listingId or not sellerId then
-        TriggerClientEvent('fish_hub:notification', src, 'Missing data.', 'error')
-        return
-    end
-
-    local channelId = DataStore.GetOrCreateDMChannel(src, sellerId)
-
-    -- Find listing name for context message
-    local listingName = 'a listing'
-    for _, l in ipairs(DataStore.listings) do
-        if l.id == listingId then
-            listingName = l.name
-            break
-        end
-    end
-
-    local playerName = GetSafePlayerName(src)
-    local profile = DataStore.GetProfile(src)
-    if profile.username and profile.username ~= '' then
-        playerName = profile.username
-    end
-
-    DataStore.AddMessage(src, playerName, channelId, 'Interested in: ' .. listingName)
-
-    -- Notify buyer to open DM channel
-    TriggerClientEvent('fish_hub:dmChannelCreated', src, channelId)
-
-    -- Notify seller
-    TriggerClientEvent('fish_hub:notification', sellerId, 'Someone is interested in your listing!', 'info')
-    TriggerClientEvent('fish_hub:channelsUpdated', sellerId, DataStore.GetPlayerChannels(sellerId))
-end)
-
-RegisterNetEvent('fish_hub:searchListings')
-AddEventHandler('fish_hub:searchListings', function(query, filter)
-    local src = source
-    local listings = DataStore.GetListings()
-    local results = {}
-
-    for _, listing in ipairs(listings) do
-        if listing.status == 'active' then
-            local matchesQuery = query == '' or
-                listing.name:lower():find(query) or
-                (listing.description or ''):lower():find(query)
-            local matchesFilter = filter == 'all' or listing.tag == filter
-
-            if matchesQuery and matchesFilter then
-                table.insert(results, listing)
-            end
-        end
-    end
-
-    TriggerClientEvent('fish_hub:listingUpdate', src, results)
-end)
-
-RegisterNetEvent('fish_hub:reportListing')
-AddEventHandler('fish_hub:reportListing', function(listingId)
-    local src = source
-    DebugPrint('Player ' .. src .. ' reported listing: ' .. listingId)
-    TriggerClientEvent('fish_hub:notification', src, 'Listing reported. Thank you.', 'info')
-end)
-
--- ============================================================
--- Services
--- ============================================================
-
-RegisterNetEvent('fish_hub:requestPart')
-AddEventHandler('fish_hub:requestPart', function(serviceType, details)
-    local src = source
-
-    if not serviceType or not details then
-        TriggerClientEvent('fish_hub:notification', src, 'Missing service data.', 'error')
-        return
-    end
-
-    if not Config.ServiceTypes[serviceType] then
-        TriggerClientEvent('fish_hub:notification', src, 'Invalid service type.', 'error')
-        return
-    end
-
-    local svc = Config.ServiceTypes[serviceType]
-    if svc.requiresV1 and not PlayerHasV1(src) then
-        TriggerClientEvent('fish_hub:notification', src, 'V1 chip required for this service.', 'error')
-        return
-    end
-
-    local playerName = GetSafePlayerName(src)
-    local profile = DataStore.GetProfile(src)
-    if profile.username and profile.username ~= '' then
-        playerName = profile.username
-    end
-
-    DebugPrint('Service request from ' .. playerName .. ': ' .. serviceType)
-
-    local success, result = DataStore.CreateListing(src, {
-        name        = svc.label .. ' Request',
-        description = 'Service request: ' .. details,
-        price       = 0,
-        tag         = 'buying',
-        listingType = 'service',
-        sellerName  = playerName
+    -- Broadcast to all hub clients
+    TriggerClientEvent('fish_hub:listingCreated', -1, {
+        id         = id,
+        seller_name = playerName,
+        type       = data.type,
+        category   = data.category,
+        level      = data.level,
+        price      = data.price,
+        description = data.description,
+        is_illegal = data.is_illegal,
     })
 
-    if success then
-        TriggerClientEvent('fish_hub:notification', src, 'Service request submitted.', 'success')
-    else
-        TriggerClientEvent('fish_hub:notification', src, 'Failed to submit request.', 'error')
-    end
+    TriggerClientEvent('fish_hub:notify', src, {type='success', message='Listing posted!'})
+end)
+
+RegisterNetEvent('fish_hub:deleteListing')
+AddEventHandler('fish_hub:deleteListing', function(listingId)
+    local src        = source
+    local identifier = GetIdentifier(src)
+    DB.DeleteListing(listingId, identifier)
+    TriggerClientEvent('fish_hub:listingDeleted', -1, listingId)
+    TriggerClientEvent('fish_hub:notify', src, {type='success', message='Listing removed.'})
 end)
 
 -- ============================================================
--- Chip System
+-- Chat
 -- ============================================================
 
-RegisterNetEvent('fish_hub:installChip')
-AddEventHandler('fish_hub:installChip', function(chipType)
+RegisterNetEvent('fish_hub:getMessages')
+AddEventHandler('fish_hub:getMessages', function(channel)
     local src = source
+    -- For DM channels, verify the player is one of the participants
+    if channel:sub(1, 3) == 'dm:' then
+        local identifier = GetIdentifier(src)
+        if not channel:find(identifier, 1, true) then
+            TriggerClientEvent('fish_hub:notify', src, {type='error', message='Access denied to this channel.'})
+            return
+        end
+    end
+    local messages = DB.GetMessages(channel, 80)
+    TriggerClientEvent('fish_hub:receiveMessages', src, channel, messages)
+end)
 
-    if not Config.ChipTypes[chipType] then
-        TriggerClientEvent('fish_hub:notification', src, 'Invalid chip type.', 'error')
+RegisterNetEvent('fish_hub:sendMessage')
+AddEventHandler('fish_hub:sendMessage', function(channel, message)
+    local src        = source
+    local identifier = GetIdentifier(src)
+    local playerName = GetPlayerName_Safe(src)
+    local player     = exports.qbx_core:GetPlayer(src)
+    local meta       = player and player.PlayerData.metadata or {}
+
+    -- Channel permission check
+    if channel == 'illegal' and not meta.fish_chip_v2 then
+        TriggerClientEvent('fish_hub:notify', src, {type='error', message='V2 chip required for underground channel.'})
+        return
+    end
+    if channel ~= 'illegal' and channel:sub(1, 3) ~= 'dm:' and not meta.fish_chip_v1 then
+        TriggerClientEvent('fish_hub:notify', src, {type='error', message='V1 chip required for community chat.'})
         return
     end
 
-    local success, msg = DataStore.InstallChip(src, chipType)
-    if success then
-        TriggerClientEvent('fish_hub:notification', src, 'Chip installed: ' .. Config.ChipTypes[chipType].label, 'success')
-        TriggerClientEvent('fish_hub:chipsUpdated', src, DataStore.GetPlayerChips(src))
-    else
-        TriggerClientEvent('fish_hub:notification', src, 'Failed: ' .. msg, 'error')
+    -- DM: verify participant
+    if channel:sub(1, 3) == 'dm:' then
+        if not channel:find(identifier, 1, true) then
+            TriggerClientEvent('fish_hub:notify', src, {type='error', message='Cannot send to this DM.'})
+            return
+        end
     end
+
+    -- Sanitize
+    message = message:sub(1, 500)
+    if #message == 0 then return end
+
+    DB.SendMessage(channel, identifier, playerName, message)
+
+    local msgData = {
+        channel        = channel,
+        sender_identifier = identifier,
+        sender_name    = playerName,
+        message        = message,
+        sent_at        = os.date('%Y-%m-%d %H:%M:%S')
+    }
+
+    -- Broadcast to all hub clients (they filter by channel client-side)
+    TriggerClientEvent('fish_hub:newMessage', -1, msgData)
 end)
 
-RegisterNetEvent('fish_hub:removeChip')
-AddEventHandler('fish_hub:removeChip', function(chipType)
-    local src = source
-    local success, msg = DataStore.RemoveChip(src, chipType)
-    if success then
-        TriggerClientEvent('fish_hub:notification', src, 'Chip removed.', 'success')
-        TriggerClientEvent('fish_hub:chipsUpdated', src, DataStore.GetPlayerChips(src))
-    else
-        TriggerClientEvent('fish_hub:notification', src, 'Failed: ' .. msg, 'error')
-    end
+-- Start a private DM conversation
+RegisterNetEvent('fish_hub:startDM')
+AddEventHandler('fish_hub:startDM', function(targetIdentifier)
+    local src        = source
+    local identifier = GetIdentifier(src)
+    local channel    = DMChannel(identifier, targetIdentifier)
+    local messages   = DB.GetMessages(channel, 50)
+    TriggerClientEvent('fish_hub:dmOpened', src, channel, messages, targetIdentifier)
 end)
 
 -- ============================================================
--- HEAT System
+-- HEAT Ranking
 -- ============================================================
 
-RegisterNetEvent('fish_hub:updateHeat')
-AddEventHandler('fish_hub:updateHeat', function(vehicleData)
+RegisterNetEvent('fish_hub:getHeatRanking')
+AddEventHandler('fish_hub:getHeatRanking', function()
     local src = source
-    if not vehicleData then return end
-
-    vehicleData.playerName = GetSafePlayerName(src)
-    local profile = DataStore.GetProfile(src)
-    if profile.username and profile.username ~= '' then
-        vehicleData.playerName = profile.username
-    end
-
-    DataStore.UpdateHeat(src, vehicleData)
-
-    TriggerClientEvent('fish_hub:heatUpdate', -1, {
-        heat    = DataStore.GetHeatData(),
-        ranking = DataStore.GetHeatRanking()
-    })
+    local ranking = exports['fish_tunes']:GetHeatLeaderboard()
+    TriggerClientEvent('fish_hub:receiveHeatRanking', src, ranking)
 end)
 
-RegisterNetEvent('fish_hub:uploadCarPhoto')
-AddEventHandler('fish_hub:uploadCarPhoto', function(vehicleModel, photoUrl)
-    local src = source
-    if not vehicleModel then
-        TriggerClientEvent('fish_hub:notification', src, 'Missing vehicle model.', 'error')
-        return
-    end
+-- ============================================================
+-- Player Data for Hub (own vehicles + HEAT)
+-- ============================================================
 
-    if photoUrl and #photoUrl > 512 then
-        TriggerClientEvent('fish_hub:notification', src, 'URL too long.', 'error')
-        return
-    end
+RegisterNetEvent('fish_hub:getMyData')
+AddEventHandler('fish_hub:getMyData', function()
+    local src        = source
+    local identifier = GetIdentifier(src)
 
-    local success, err = DataStore.SetVehiclePhoto(src, vehicleModel, photoUrl or '')
-    if success then
-        TriggerClientEvent('fish_hub:notification', src, 'Photo updated.', 'success')
-        TriggerClientEvent('fish_hub:heatUpdate', -1, {
-            heat    = DataStore.GetHeatData(),
-            ranking = DataStore.GetHeatRanking()
+    -- Get all player vehicles from normalizer
+    local vehicles = DB.GetVehiclesByOwner(identifier)
+
+    -- Enrich with HEAT data
+    local vehicleList = {}
+    for plate, data in pairs(vehicles) do
+        local tuneData = DB.GetTunes(plate)
+        table.insert(vehicleList, {
+            plate    = plate,
+            archetype = data.archetype,
+            rank     = data.rank,
+            score    = data.score,
+            heat     = (tuneData and tuneData.heat) or 0
         })
-    else
-        TriggerClientEvent('fish_hub:notification', src, 'Vehicle not found.', 'error')
     end
-end)
 
-RegisterNetEvent('fish_hub:requestHeatRanking')
-AddEventHandler('fish_hub:requestHeatRanking', function()
-    local src = source
-    TriggerClientEvent('fish_hub:heatUpdate', src, {
-        ranking = DataStore.GetHeatRanking()
-    })
+    TriggerClientEvent('fish_hub:receiveMyData', src, vehicleList)
 end)
 
 -- ============================================================
--- DM System
+-- Server Exports for other resources
 -- ============================================================
 
-RegisterNetEvent('fish_hub:dmPlayer')
-AddEventHandler('fish_hub:dmPlayer', function(targetId, message)
-    local src = source
-
-    if not targetId or not message or message == '' then
-        TriggerClientEvent('fish_hub:notification', src, 'Invalid DM data.', 'error')
-        return
-    end
-
-    local channelId = DataStore.GetOrCreateDMChannel(src, targetId)
-    local playerName = GetSafePlayerName(src)
-    local profile = DataStore.GetProfile(src)
-    if profile.username and profile.username ~= '' then
-        playerName = profile.username
-    end
-
-    local msg = DataStore.AddMessage(src, playerName, channelId, message)
-
-    -- Send to both players
-    TriggerClientEvent('fish_hub:newMessage', src, msg)
-    TriggerClientEvent('fish_hub:newMessage', targetId, msg)
+exports('GetHubListings', function(isIllegal)
+    return DB.GetListings(isIllegal)
 end)
-
--- ============================================================
--- Admin / Cleanup
--- ============================================================
-
-RegisterCommand('fishhub_clean', function(source, args)
-    if source ~= 0 then return end
-    DataStore.CleanExpiredListings()
-    print('[FISH HUB] Cleaned expired listings.')
-end, true)
-
-RegisterCommand('fishhub_save', function(source, args)
-    if source ~= 0 then return end
-    DataStore.SaveAll()
-    print('[FISH HUB] All data saved.')
-end, true)

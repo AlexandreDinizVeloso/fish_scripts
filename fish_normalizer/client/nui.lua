@@ -1,63 +1,46 @@
+-- ============================================================
 -- fish_normalizer: Client NUI Handler
--- Handles NUI messages and state management
+-- All NUI callbacks route through here to the server.
+-- ============================================================
 
-local nuiReady = false
+local isNuiOpen = false
 
--- Listen for NUI ready state
-RegisterNUICallback('nuiReady', function(data, cb)
-    nuiReady = true
+-- ── Open / Close ─────────────────────────────────────────────
+
+RegisterNetEvent('fish_normalizer:openNUI')
+AddEventHandler('fish_normalizer:openNUI', function(data)
+    if not isAdmin then return end
+    isNuiOpen = true
+    SetNuiFocus(true, true)
+    SendNUIMessage({
+        action      = 'openNormalizer',
+        plate       = data.plate,
+        vehicleNetId = data.vehicleNetId,
+        vehicleName = data.vehicleName or '—',
+        existing    = data.existing or {},
+        remapData   = data.remapData,
+        tuneData    = data.tuneData,
+    })
+end)
+
+RegisterNUICallback('close', function(data, cb)
+    isNuiOpen = false
+    SetNuiFocus(false, false)
     cb('ok')
 end)
 
--- Listen for archetype preview (hover)
-RegisterNUICallback('previewArchetype', function(data, cb)
-    if not currentVehicle then cb('error'); return end
+-- ── Save (admin confirms normalization) ──────────────────────
 
-    local archetype = data.archetype
-    local stats = GetVehiclePerformanceStats(currentVehicle)
-    local baseScore = CalculateBaseScore(stats)
-    local finalScore, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
-
-    local rank = GetRankFromScore(finalScore)
-
-    cb(json.encode({
-        score = finalScore,
-        rank = rank,
-        stats = modifiedStats or stats.normalized
-    }))
+RegisterNUICallback('saveData', function(data, cb)
+    if not data.plate then cb('error'); return end
+    TriggerServerEvent('fish_normalizer:saveData', data.plate, data, data.vehicleNetId)
+    isNuiOpen = false
+    SetNuiFocus(false, false)
+    cb('ok')
 end)
 
--- Listen for sub-archetype preview
-RegisterNUICallback('previewSubArchetype', function(data, cb)
-    if not currentVehicle then cb('error'); return end
+-- ── Export ────────────────────────────────────────────────────
 
-    local archetype = data.archetype or 'esportivo'
-    local subArchetype = data.subArchetype
-    local stats = GetVehiclePerformanceStats(currentVehicle)
-    local baseScore = CalculateBaseScore(stats)
-    local finalScore, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
-    finalScore = ApplySubArchetypeBonuses(finalScore, subArchetype)
-
-    local rank = GetRankFromScore(finalScore)
-
-    cb(json.encode({
-        score = finalScore,
-        rank = rank,
-        stats = modifiedStats or stats.normalized
-    }))
-end)
-
--- Get rank color helper
-function GetRankColor(score)
-    for _, rank in ipairs(Config.Ranks) do
-        if score >= rank.min and score <= rank.max then
-            return rank.color
-        end
-    end
-    return '#8B8B8B'
-end
-
--- Export for other resources to check NUI state
 function IsNormalizerOpen()
     return isNuiOpen
 end

@@ -253,8 +253,19 @@ RegisterNUICallback('confirmRemap', function(data, cb)
     }
 
     remapData[plate] = remapInfo
-    -- Use cost-based server event
-    TriggerServerEvent('fish_remaps:confirmRemapServer', plate, remapInfo)
+
+    -- Build server-compatible payload with snake_case fields for DB
+    local serverPayload = {
+        original_archetype   = preservedOriginalArchetype,
+        current_archetype    = data.archetype or originalArchetype,
+        sub_archetype        = data.subArchetype,
+        stat_adjustments     = data.adjustments or {},
+        blended_stats        = data.blendedStats or {},
+        final_stats          = data.finalStats or {},
+    }
+
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_remaps:confirmRemap', plate, serverPayload, netId)
 
     TriggerEvent('fish_remaps:performanceUpdated', plate, remapInfo)
     cb('ok')
@@ -263,14 +274,16 @@ end)
 RegisterNUICallback('saveDyno', function(data, cb)
     if not currentVehicle then cb('error'); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_remaps:saveDynoServer', plate, data)
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_remaps:saveDyno', plate, data, netId)
     cb('ok')
 end)
 
 RegisterNUICallback('saveTransmission', function(data, cb)
     if not currentVehicle then cb('error'); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_remaps:saveTransmissionServer', plate, data)
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_remaps:saveTransmission', plate, data, netId)
     cb('ok')
 end)
 
@@ -278,21 +291,24 @@ end)
 RegisterNUICallback('applyDyno', function(data, cb)
     if not currentVehicle then cb('error'); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_remaps:saveDynoServer', plate, data)
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_remaps:saveDyno', plate, data, netId)
     cb('ok')
 end)
 
 RegisterNUICallback('applyTransMode', function(data, cb)
     if not currentVehicle then cb('error'); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_remaps:saveTransmissionServer', plate, { mode = data.mode })
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_remaps:saveTransmission', plate, { mode = data.mode }, netId)
     cb('ok')
 end)
 
 RegisterNUICallback('applyGearRatio', function(data, cb)
     if not currentVehicle then cb('error'); return end
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    TriggerServerEvent('fish_remaps:saveTransmissionServer', plate, { gearPreset = data.preset })
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_remaps:saveTransmission', plate, { gearPreset = data.preset }, netId)
     cb('ok')
 end)
 
@@ -308,9 +324,9 @@ AddEventHandler('fish_remaps:receiveData', function(data)
     end
 end)
 
--- Request data on spawn
+-- Request all remap data on spawn (one event for all plates)
 Citizen.CreateThread(function()
-    TriggerServerEvent('fish_remaps:requestData')
+    TriggerServerEvent('fish_remaps:requestAllData')
 end)
 
 -- Item usage: remap chip
@@ -319,11 +335,19 @@ AddEventHandler('fish_remaps:useRemapChip', function()
     OpenRemap()
 end)
 
--- Notification from server
-RegisterNetEvent('fish_remaps:notification')
-AddEventHandler('fish_remaps:notification', function(msg, type)
+-- Notification from server (server sends table {type, message})
+RegisterNetEvent('fish_remaps:notify')
+AddEventHandler('fish_remaps:notify', function(data)
+    local msg = ''
+    local msgType = 'info'
+    if type(data) == 'table' then
+        msg = data.message or ''
+        msgType = data.type or 'info'
+    else
+        msg = tostring(data)
+    end
     if isNuiOpen then
-        SendNUIMessage({ action = 'notification', message = msg, type = type or 'info' })
+        SendNUIMessage({ action = 'notification', message = msg, type = msgType })
     end
     ShowNotification(msg)
 end)

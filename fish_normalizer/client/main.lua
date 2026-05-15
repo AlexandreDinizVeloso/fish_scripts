@@ -2,6 +2,43 @@
 local isNuiOpen = false
 local currentVehicle = nil
 local vehicleData = {}
+local isAdmin = false
+
+-- ============================================================
+-- Entity State Bag: Apply handling when server pushes update
+-- ============================================================
+AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, replicated)
+    if not value then return end
+    local netId = tonumber(bagName:gsub('entity:', ''), 10)
+    if not netId then return end
+    local veh = NetworkGetEntityFromNetworkId(netId)
+    Citizen.CreateThread(function()
+        -- Wait up to 2s for entity to exist
+        local attempts = 0
+        while not DoesEntityExist(veh) and attempts < 20 do
+            Citizen.Wait(100)
+            veh = NetworkGetEntityFromNetworkId(netId)
+            attempts = attempts + 1
+        end
+        if DoesEntityExist(veh) then
+            exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+        end
+    end)
+end)
+
+-- Update local cache when server pushes score
+AddStateBagChangeHandler('fish:score', nil, function(bagName, key, value, _, replicated)
+    if not value then return end
+    local netId = tonumber(bagName:gsub('entity:', ''), 10)
+    if not netId then return end
+    local veh = NetworkGetEntityFromNetworkId(netId)
+    if DoesEntityExist(veh) then
+        local plate = GetVehicleNumberPlateText(veh):gsub('%s+', '')
+        if vehicleData[plate] then
+            vehicleData[plate].score = value
+        end
+    end
+end)
 
 -- Get vehicle performance stats from handling.meta
 function GetVehiclePerformanceStats(vehicle)
@@ -290,9 +327,27 @@ function OpenNormalizer()
     isNuiOpen = true
 end
 
--- Register command
+-- Check admin status on spawn
+AddEventHandler('QBCore:Client:OnPlayerLoaded', function()
+    Citizen.CreateThread(function()
+        Citizen.Wait(1000)
+        -- QBX: check via ace permissions
+        TriggerServerEvent('fish_normalizer:checkAdminStatus')
+    end)
+end)
+
+RegisterNetEvent('fish_normalizer:setAdminStatus')
+AddEventHandler('fish_normalizer:setAdminStatus', function(status)
+    isAdmin = status
+end)
+
+-- Register command (admin only)
 RegisterCommand('normalize', function()
     if isNuiOpen then return end
+    if not isAdmin then
+        ShowNotification('~r~You do not have permission to use the normalizer.')
+        return
+    end
     OpenNormalizer()
 end, false)
 
@@ -327,8 +382,9 @@ RegisterNUICallback('selectArchetype', function(data, cb)
 
     local rank = GetRankFromScore(finalScore)
 
-    -- Save to server
-    TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate])
+    -- Save to server with vehicle net ID for state bag push
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate], netId)
 
     cb(json.encode({
         score = finalScore,
@@ -358,7 +414,8 @@ RegisterNUICallback('selectSubArchetype', function(data, cb)
 
     local rank = GetRankFromScore(finalScore)
 
-    TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate])
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate], netId)
 
     cb(json.encode({
         score = finalScore,
@@ -403,43 +460,70 @@ function ShowNotification(msg)
     DrawNotification(false, false)
 end
 
--- Hold K to show nearby ratings
+-- ============================================================
+-- Hold K: Show nearby vehicle ratings
+-- Performance: 200ms poll, reads state bag first (no calc needed)
+-- ============================================================
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(0)
         if IsControlPressed(0, 311) then -- K key
-            local ped = PlayerPedId()
-            local pos = GetEntityCoords(ped)
+            Citizen.Wait(0)  -- render every frame WHILE held
+            local ped    = PlayerPedId()
+            local pos    = GetEntityCoords(ped)
             local vehicles = GetGamePool('CVehicle')
 
             for _, veh in ipairs(vehicles) do
-                local vehPos = GetEntityCoords(veh)
-                local dist = #(pos - vehPos)
-                if dist < 30.0 and DoesEntityExist(veh) then
-                    local result = GetVehicleRank(veh)
-                    if result then
-                        local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
-                        if onScreen then
-                            SetTextScale(0.35, 0.35)
-                            SetTextFont(4)
-                            SetTextProportional(true)
-                            SetTextColour(
-                                tonumber(result.rank.color:sub(2,3), 16),
-                                tonumber(result.rank.color:sub(4,5), 16),
-                                tonumber(result.rank.color:sub(6,7), 16),
-                                255
-                            )
-                            SetTextDropshadow(2, 0, 0, 0, 255)
-                            SetTextEdge(2, 0, 0, 0, 150)
-                            SetTextDropShadow()
-                            SetTextOutline()
-                            SetTextEntry('STRING')
-                            AddTextComponentString(result.rank.name .. ': ' .. result.score)
-                            DrawText(screenX, screenY)
+                if DoesEntityExist(veh) then
+                    local vehPos = GetEntityCoords(veh)
+                    local dist   = #(pos - vehPos)
+                    if dist < 40.0 then
+                        -- Prefer state bag (synced from server)
+                        local netId  = NetworkGetNetworkIdFromEntity(veh)
+                        local bagScore = Entity(veh).state['fish:score']
+                        local bagRank  = Entity(veh).state['fish:rank']
+
+                        local displayScore = bagScore
+                        local displayRank  = bagRank
+
+                        -- Fall back to local calculation if no state bag
+                        if not displayScore then
+                            local result = GetVehicleRank(veh)
+                            if result then
+                                displayScore = result.score
+                                displayRank  = result.rank and result.rank.name
+                            end
+                        end
+
+                        if displayScore and displayRank then
+                            -- Get rank color
+                            local rankColor = '#FFFFFF'
+                            for _, r in ipairs(Config.Ranks) do
+                                if r.name == displayRank then rankColor = r.color; break end
+                            end
+
+                            local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
+                            if onScreen then
+                                local r = tonumber(rankColor:sub(2,3), 16) or 255
+                                local g = tonumber(rankColor:sub(4,5), 16) or 255
+                                local b = tonumber(rankColor:sub(6,7), 16) or 255
+                                SetTextScale(0.38, 0.38)
+                                SetTextFont(4)
+                                SetTextProportional(true)
+                                SetTextColour(r, g, b, 255)
+                                SetTextDropshadow(2, 0, 0, 0, 200)
+                                SetTextEdge(1, 0, 0, 0, 140)
+                                SetTextDropShadow()
+                                SetTextOutline()
+                                SetTextEntry('STRING')
+                                AddTextComponentString(displayRank .. ': ' .. displayScore)
+                                DrawText(screenX, screenY)
+                            end
                         end
                     end
                 end
             end
+        else
+            Citizen.Wait(200)  -- idle poll when K not held
         end
     end
 end)

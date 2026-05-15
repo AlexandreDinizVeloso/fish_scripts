@@ -1,145 +1,138 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fish Normalizer</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<title>FISH Normalizer — OBD-III Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070810;--bg2:#0d0e1a;--bg3:#131528;
+  --glass:rgba(255,255,255,0.03);--border:rgba(255,255,255,0.07);
+  --cyan:#00d4ff;--orange:#ff6b00;--green:#00ff88;--red:#ff1744;--purple:#a855f7;--yellow:#ffd600;
+  --text:#e8eaf6;--muted:rgba(232,234,246,0.4);
+  --mono:'Share Tech Mono',monospace;--sans:'Space Grotesk',sans-serif;--orb:'Orbitron',sans-serif;
+}
+body{font-family:var(--sans);background:transparent;color:var(--text);height:100vh;width:100vw;display:none;align-items:center;justify-content:center}
+body.visible{display:flex}
+
+.wrap{width:760px;background:linear-gradient(145deg,#0d0f1e,#080916);border:1px solid rgba(255,107,0,0.15);border-radius:16px;box-shadow:0 0 60px rgba(255,107,0,0.05),inset 0 1px 0 rgba(255,255,255,0.04);overflow:hidden}
+
+/* Header */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(255,107,0,0.03)}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--orange),var(--red));border-radius:8px;display:flex;align-items:center;justify-content:center}
+.hdr h1{font-family:var(--orb);font-size:13px;letter-spacing:3px;color:var(--orange)}
+.admin-badge{font-family:var(--mono);font-size:9px;padding:2px 7px;background:rgba(255,107,0,0.12);border:1px solid rgba(255,107,0,0.3);border-radius:20px;color:var(--orange);margin-left:8px}
+.btn-close{background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--muted);border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all 0.2s}
+.btn-close:hover{background:rgba(255,23,68,0.15);color:var(--red)}
+
+/* Vehicle strip */
+.veh{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.01)}
+.veh-name{font-size:14px;font-weight:600}
+.veh-plate{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,0.07);border-radius:4px;padding:2px 8px;color:var(--muted);letter-spacing:2px}
+.score-badge{margin-left:auto;display:flex;align-items:center;gap:8px}
+.score-num{font-family:var(--orb);font-size:22px;font-weight:900;color:var(--cyan);text-shadow:0 0 15px rgba(0,212,255,0.4)}
+.rank-badge{font-family:var(--orb);font-size:12px;padding:3px 10px;border-radius:6px;border:1px solid}
+
+/* Body grid */
+.body{display:grid;grid-template-columns:1fr 220px;gap:0;min-height:380px}
+
+/* Left: archetype + sub */
+.left{padding:16px 18px;display:flex;flex-direction:column;gap:14px;border-right:1px solid var(--border)}
+.section-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px}
+.archetype-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.arch-card{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:10px 8px;cursor:pointer;text-align:center;transition:all 0.2s}
+.arch-card:hover{border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.05)}
+.arch-card.selected{border-color:var(--cyan);background:rgba(0,212,255,0.1);box-shadow:0 0 12px rgba(0,212,255,0.15)}
+.arch-card .icon{font-size:20px;margin-bottom:4px}
+.arch-card .name{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.arch-card .desc{font-size:9px;color:var(--muted);margin-top:2px}
+
+.sub-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.sub-card{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:7px;padding:6px 8px;cursor:pointer;transition:all 0.2s;font-size:10px;color:var(--muted)}
+.sub-card:hover{border-color:rgba(168,85,247,0.3);color:var(--text)}
+.sub-card.selected{border-color:var(--purple);background:rgba(168,85,247,0.1);color:var(--purple)}
+
+/* Right: stats + rank */
+.right{padding:16px 16px;display:flex;flex-direction:column;gap:12px}
+.stat-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.stat-label{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase}
+.stat-val{font-family:var(--mono);font-size:13px;color:var(--cyan);font-weight:600}
+.stat-bar-wrap{height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:4px;overflow:hidden}
+.stat-bar{height:100%;border-radius:2px;transition:width 0.3s;background:linear-gradient(90deg,var(--cyan),var(--purple))}
+
+.rank-selector{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.rank-btn{text-align:center;padding:8px 4px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-family:var(--orb);font-size:11px;font-weight:700;transition:all 0.2s;color:var(--muted)}
+.rank-btn:hover{border-color:var(--cyan);color:var(--text)}
+.rank-btn.sel-C{border-color:#607d8b;background:rgba(96,125,139,0.12);color:#90a4ae}
+.rank-btn.sel-B{border-color:#4caf50;background:rgba(76,175,80,0.12);color:#81c784}
+.rank-btn.sel-A{border-color:#ff9800;background:rgba(255,152,0,0.12);color:#ffb74d}
+.rank-btn.sel-S{border-color:#e91e63;background:rgba(233,30,99,0.12);color:#f06292}
+
+/* Footer */
+.ftr{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border)}
+.btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;border:1px solid;cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:500;transition:all 0.2s}
+.btn-ghost{background:rgba(255,255,255,0.04);border-color:var(--border);color:var(--muted)}
+.btn-ghost:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.btn-orange{background:rgba(255,107,0,0.1);border-color:rgba(255,107,0,0.4);color:var(--orange)}
+.btn-orange:hover{background:rgba(255,107,0,0.2);box-shadow:0 0 12px rgba(255,107,0,0.2)}
+.material-symbols-sharp{font-size:16px!important}
+</style>
 </head>
 <body>
-    <div id="app" class="hidden">
-        <div class="normalizer-container">
-            <!-- Header -->
-            <div class="header">
-                <div class="header-left">
-                    <div class="logo">FISH<span class="accent">NORMALIZER</span></div>
-                    <div class="version">v1.0</div>
-                </div>
-                <div class="header-center">
-                    <div class="vehicle-name" id="vehicleName">VEHICLE NAME</div>
-                    <div class="plate" id="plateDisplay">PLATE</div>
-                </div>
-                <div class="header-right">
-                    <button class="btn-close" id="btnClose">✕</button>
-                </div>
-            </div>
-
-            <!-- Main Content -->
-            <div class="main-content">
-                <!-- Left Panel: Stats -->
-                <div class="panel stats-panel">
-                    <div class="panel-title">PERFORMANCE METRICS</div>
-
-                    <!-- Score Display -->
-                    <div class="score-display">
-                        <div class="score-ring" id="scoreRing">
-                            <svg viewBox="0 0 120 120">
-                                <circle class="score-ring-bg" cx="60" cy="60" r="54"></circle>
-                                <circle class="score-ring-fill" id="scoreRingFill" cx="60" cy="60" r="54"></circle>
-                            </svg>
-                            <div class="score-value" id="scoreValue">0</div>
-                            <div class="score-label">SCORE</div>
-                        </div>
-                        <div class="rank-badge" id="rankBadge">C</div>
-                    </div>
-
-                    <!-- Stats Bars -->
-                    <div class="stats-bars">
-                        <div class="stat-row">
-                            <div class="stat-label">
-                                <span class="stat-icon">⚡</span>
-                                <span>TOP SPEED</span>
-                            </div>
-                            <div class="stat-bar-container">
-                                <div class="stat-bar" id="barTopSpeed" style="width: 0%"></div>
-                            </div>
-                            <div class="stat-value" id="valTopSpeed">0</div>
-                        </div>
-                        <div class="stat-row">
-                            <div class="stat-label">
-                                <span class="stat-icon">🚀</span>
-                                <span>ACCELERATION</span>
-                            </div>
-                            <div class="stat-bar-container">
-                                <div class="stat-bar accel" id="barAccel" style="width: 0%"></div>
-                            </div>
-                            <div class="stat-value" id="valAccel">0</div>
-                        </div>
-                        <div class="stat-row">
-                            <div class="stat-label">
-                                <span class="stat-icon">🎯</span>
-                                <span>HANDLING</span>
-                            </div>
-                            <div class="stat-bar-container">
-                                <div class="stat-bar handling" id="barHandling" style="width: 0%"></div>
-                            </div>
-                            <div class="stat-value" id="valHandling">0</div>
-                        </div>
-                        <div class="stat-row">
-                            <div class="stat-label">
-                                <span class="stat-icon">🛑</span>
-                                <span>BRAKING</span>
-                            </div>
-                            <div class="stat-bar-container">
-                                <div class="stat-bar braking" id="barBraking" style="width: 0%"></div>
-                            </div>
-                            <div class="stat-value" id="valBraking">0</div>
-                        </div>
-                    </div>
-
-                    <!-- Radar Chart -->
-                    <div class="radar-container">
-                        <canvas id="radarChart" width="250" height="250"></canvas>
-                    </div>
-                </div>
-
-                <!-- Center Panel: Archetype Selection -->
-                <div class="panel archetype-panel">
-                    <div class="panel-title">SELECT ARCHETYPE</div>
-                    <div class="archetype-grid" id="archetypeGrid">
-                        <!-- Archetype cards will be populated by JS -->
-                    </div>
-                </div>
-
-                <!-- Right Panel: Sub-Archetype -->
-                <div class="panel subarch-panel">
-                    <div class="panel-title">PREPARATION TYPE</div>
-                    <div class="subarch-grid" id="subArchGrid">
-                        <!-- Sub-archetype cards will be populated by JS -->
-                    </div>
-
-                    <!-- Confirm Button -->
-                    <div class="confirm-area">
-                        <button class="btn-confirm" id="btnConfirm">
-                            <span class="btn-icon">✓</span>
-                            <span>CONFIRM NORMALIZATION</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Archetype Detail Overlay -->
-            <div class="archetype-detail hidden" id="archetypeDetail">
-                <div class="detail-header">
-                    <span class="detail-icon" id="detailIcon"></span>
-                    <span class="detail-title" id="detailTitle"></span>
-                </div>
-                <div class="detail-description" id="detailDesc"></div>
-                <div class="detail-columns">
-                    <div class="detail-col pros">
-                        <div class="detail-col-title">ADVANTAGES</div>
-                        <ul id="detailPros"></ul>
-                    </div>
-                    <div class="detail-col cons">
-                        <div class="detail-col-title">DISADVANTAGES</div>
-                        <ul id="detailCons"></ul>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-icon"><span class="material-symbols-sharp">admin_panel_settings</span></div>
+      <h1>NORMALIZER</h1>
+      <span class="admin-badge">ADMIN</span>
     </div>
+    <button class="btn-close" onclick="closeNUI()"><span class="material-symbols-sharp">close</span></button>
+  </div>
 
-    <script src="script.js"></script>
+  <div class="veh">
+    <span class="veh-name" id="vehName">—</span>
+    <span class="veh-plate" id="vehPlate">———————</span>
+    <div class="score-badge">
+      <div class="score-num" id="scorePreview">—</div>
+      <div class="rank-badge" id="rankBadge" style="border-color:#607d8b;color:#90a4ae">C</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="left">
+      <!-- Archetype -->
+      <div>
+        <div class="section-label">Archetype (DNA)</div>
+        <div class="archetype-grid" id="archetypeGrid"></div>
+      </div>
+      <!-- Sub-archetype -->
+      <div>
+        <div class="section-label">Sub-Archetype (Personality)</div>
+        <div class="sub-grid" id="subGrid"></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="section-label">Vehicle Statistics</div>
+      <div id="statsPanel"></div>
+      <div>
+        <div class="section-label" style="margin-top:8px">Override Rank</div>
+        <div class="rank-selector" id="rankSelector"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ftr">
+    <button class="btn btn-ghost" onclick="closeNUI()">Cancel</button>
+    <button class="btn btn-orange" onclick="saveNormalization()">
+      <span class="material-symbols-sharp">save</span>
+      Normalize Vehicle
+    </button>
+  </div>
+</div>
+<script src="script.js"></script>
 </body>
 </html>
