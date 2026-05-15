@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: transparent !important; }
   :root {
     --bg:       #070810;
     --bg2:      #0d0e1a;
@@ -31,12 +32,11 @@
     font-family: var(--sans);
     background: transparent;
     color: var(--text);
-    height: 100vh;
-    width: 100vw;
-    display: none;
-    overflow: hidden;
     margin: 0;
     padding: 0;
+    overflow: hidden;
+    pointer-events: none;
+    display: none;
   }
   body.visible { display: block; }
 

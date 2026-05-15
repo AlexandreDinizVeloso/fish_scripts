@@ -69,6 +69,14 @@ function buildSubGrid() {
   });
 }
 
+// PI ranges for each class — midpoints used for autobalance
+const CLASS_RANGES = {
+  C: { min: 0,   max: 499, mid: 250 },
+  B: { min: 500, max: 749, mid: 624 },
+  A: { min: 750, max: 899, mid: 824 },
+  S: { min: 900, max: 999, mid: 950 },
+};
+
 function buildRankSelector() {
   const sel = document.getElementById('rankSelector');
   sel.innerHTML = '';
@@ -78,10 +86,21 @@ function buildRankSelector() {
     btn.className = 'rank-btn' + (isSel ? ' sel-' + r.name : '');
     btn.textContent = r.name;
     btn.style.borderColor = isSel ? r.color : '';
-    btn.onclick = () => { nData.rank = r.name; buildRankSelector(); updateRankBadge(); };
+    btn.onclick = () => {
+      nData.rank = r.name;
+      // Autobalance: if current score is outside the chosen class range, set to midpoint
+      const range = CLASS_RANGES[r.name];
+      if (range && (nData.score < range.min || nData.score > range.max)) {
+        nData.score = range.mid;
+        document.getElementById('scorePreview').textContent = nData.score;
+      }
+      buildRankSelector();
+      updateRankBadge();
+    };
     sel.appendChild(btn);
   });
 }
+
 
 function updateRankBadge() {
   const badge = document.getElementById('rankBadge');

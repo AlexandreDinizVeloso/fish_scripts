@@ -163,24 +163,18 @@ function submitListing(isIllegal) {
   if (!data.category || data.price < 0) { showToast('Please fill all fields.', 'error'); return; }
   fetch('https://fish_hub/createListing', { method: 'POST', body: JSON.stringify(data) });
   showToast('Listing posted!', 'success');
-  // Don't re-render immediately — the server will broadcast listingCreated which updates the state
+
+  // Show "posted" state — the server will broadcast listingCreated which will refresh the list
+  const content = document.getElementById('mainContent');
+  content.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:12px;text-align:center;padding:40px 20px"><span class="material-symbols-sharp" style="font-size:32px;display:block;margin-bottom:12px;color:var(--green)">check_circle</span>Listing posted! Loading updated market...</div>';
   hubState.currentPanel = isIllegal ? 'market-illegal' : 'market-legal';
-  // Switch back to market view (empty initially, will populate when listingCreated arrives)
-  const navItem = document.querySelector(`.nav-item[data-panel="${hubState.currentPanel}"]`) || document.querySelector('.nav-item');
-  if (navItem) {
-    switchPanel(hubState.currentPanel, navItem);
-  } else {
-    // Fallback: manually update header and show loading state
-    const titles = PANEL_TITLES[hubState.currentPanel] || ['Marketplace', ''];
-    document.getElementById('panelTitle').innerHTML = `${titles[0]} <span>${titles[1]}</span>`;
-    const content = document.getElementById('mainContent');
-    content.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:40px">Posting...</div>';
-    // Request fresh listings from server after a short delay
-    setTimeout(() => {
-      fetch('https://fish_hub/getListings', { method: 'POST', body: JSON.stringify({ isIllegal }) });
-    }, 500);
-  }
+
+  // Request fresh listings to populate after short delay
+  setTimeout(() => {
+    fetch('https://fish_hub/getListings', { method: 'POST', body: JSON.stringify({ isIllegal }) });
+  }, 800);
 }
+
 
 function viewListing(id) {
   // Placeholder: could open a detail modal

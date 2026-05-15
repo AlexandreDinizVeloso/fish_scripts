@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{background:transparent!important}
 :root{
   --bg:#070810;--bg2:#0d0e1a;--bg3:#131528;
   --glass:rgba(255,255,255,0.03);--border:rgba(255,255,255,0.07);
@@ -138,22 +139,22 @@ body.visible{display:flex}
 
     <div class="nav">
       <div class="nav-section-label">Legal</div>
-      <div class="nav-item active" onclick="switchPanel('market-legal',this)">
+      <div class="nav-item active" data-panel="market-legal" onclick="switchPanel('market-legal',this)">
         <span class="material-symbols-sharp">storefront</span>Marketplace
       </div>
-      <div class="nav-item" onclick="switchPanel('chat',this)">
+      <div class="nav-item" data-panel="chat" onclick="switchPanel('chat',this)">
         <span class="material-symbols-sharp">forum</span>Community Chat
       </div>
-      <div class="nav-item" onclick="switchPanel('heat',this)">
+      <div class="nav-item" data-panel="heat" onclick="switchPanel('heat',this)">
         <span class="material-symbols-sharp">local_fire_department</span>HEAT Ranking
       </div>
       <div class="nav-sep"></div>
       <div class="nav-section-label">Underground</div>
-      <div class="nav-item" onclick="switchPanel('market-illegal',this)" id="navIllegal">
+      <div class="nav-item" data-panel="market-illegal" onclick="switchPanel('market-illegal',this)" id="navIllegal">
         <span class="material-symbols-sharp">emergency_home</span>Black Market
         <span class="nav-badge">V2</span>
       </div>
-      <div class="nav-item" onclick="switchPanel('chat-illegal',this)" id="navUnderground">
+      <div class="nav-item" data-panel="chat-illegal" onclick="switchPanel('chat-illegal',this)" id="navUnderground">
         <span class="material-symbols-sharp">lock</span>Underground Chat
         <span class="nav-badge">V2</span>
       </div>
@@ -188,7 +189,7 @@ body.visible{display:flex}
     <button class="btn btn-ghost" onclick="closeNUI()">
       <span class="material-symbols-sharp">close</span>Close
     </button>
-    <button class="btn btn-purple" id="footerAction" onclick="showPostListing()">
+    <button class="btn btn-purple" id="footerAction">
       <span class="material-symbols-sharp">add</span>Post Listing
     </button>
   </div>

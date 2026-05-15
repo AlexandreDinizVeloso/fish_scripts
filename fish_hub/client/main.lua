@@ -69,6 +69,8 @@ end)
 
 RegisterNetEvent('fish_hub:newMessage')
 AddEventHandler('fish_hub:newMessage', function(msgData)
+    -- Inject the action field so NUI message handler can route it correctly
+    msgData.action = 'newMessage'
     SendNUIMessage(msgData)
 end)
 

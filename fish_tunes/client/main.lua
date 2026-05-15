@@ -1,4 +1,4 @@
--- fish_tunes: Client Main (v2 - Tabbed UI)
+﻿-- fish_tunes: Client Main (v2 - Tabbed UI)
 local isNuiOpen = false
 local currentVehicle = nil
 local tunesData = {}
@@ -165,6 +165,12 @@ AddEventHandler('fish_tunes:openAdvancedNUI', function(plate, dynoData, dtData, 
     local displayName = GetDisplayNameFromVehicleModel(model)
 
     -- Build parts data
+    -- Sync drivetrain from server response into local cache
+    if dtData and dtData.mode then
+        if not tunesData[plate] then tunesData[plate] = {} end
+        tunesData[plate].drivetrain = dtData.mode
+    end
+
     local currentParts = tunesData[plate] and tunesData[plate].parts or {}
     local partsDisplay = {}
     for _, cat in ipairs(Config.PartCategories) do

@@ -230,7 +230,7 @@ window.addEventListener('message', e => {
     tuneState.instability   = msg.instability || 0;
     tuneState.partCosts     = msg.partCosts || {};
     tuneState.partLevels    = msg.partLevels || {};
-    tuneState.drivetrain    = (msg.drivetrain && msg.drivetrain.current) || 'FWD';
+    tuneState.drivetrain    = (msg.drivetrain && (msg.drivetrain.mode || msg.drivetrain.current)) || 'FWD';
 
     document.getElementById('vehName').textContent  = msg.vehicleName || '—';
     document.getElementById('vehPlate').textContent = tuneState.plate;

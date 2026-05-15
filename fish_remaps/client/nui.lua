@@ -1,15 +1,13 @@
 -- ============================================================
--- fish_remaps: Client NUI Handler
--- Routes all NUI callbacks to server events.
+-- fish_remaps: Client NUI Handler (server-triggered open only)
+-- NOTE: close and confirmRemap callbacks are in client/main.lua
+--       to avoid duplicate registration conflicts.
 -- ============================================================
 
-local isNuiOpen = false
-
--- ── Open (triggered from server) ─────────────────────────────
+-- ── Open (triggered from server via mechanic interaction) ────
 
 RegisterNetEvent('fish_remaps:openNUI')
 AddEventHandler('fish_remaps:openNUI', function(data)
-    isNuiOpen = true
     SetNuiFocus(true, true)
     SendNUIMessage({
         action            = 'openRemap',
@@ -20,6 +18,7 @@ AddEventHandler('fish_remaps:openNUI', function(data)
         subArchetype      = data.subArchetype,
         stage             = data.stage,
         existingData      = data.existingData,
+        adjustments       = data.adjustments,
         costs = {
             archetype_change      = 15000,
             subarchetype_change   = 5000,
@@ -27,24 +26,6 @@ AddEventHandler('fish_remaps:openNUI', function(data)
         }
     })
 end)
-
--- ── NUI Callbacks ────────────────────────────────────────────
-
-RegisterNUICallback('close', function(data, cb)
-    isNuiOpen = false
-    SetNuiFocus(false, false)
-    cb('ok')
-end)
-
-RegisterNUICallback('confirmRemap', function(data, cb)
-    if not data.plate then cb('error'); return end
-    TriggerServerEvent('fish_remaps:confirmRemap', data.plate, data.vehicleNetId, data.data)
-    isNuiOpen = false
-    SetNuiFocus(false, false)
-    cb('ok')
-end)
-
--- ── Export ────────────────────────────────────────────────────
 
 function IsRemapOpen()
     return isNuiOpen

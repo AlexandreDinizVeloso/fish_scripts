@@ -100,7 +100,12 @@ local function PushVehicleState(netId, data, remapData, tuneData)
         end
     end
 
-    local handlingProfile = HandlingEngine.BuildHandlingProfile({
+    if not HandlingEngine or not HandlingEngine.BuildHandlingProfile then
+        print('[fish_normalizer] WARNING: HandlingEngine not ready yet, skipping state bag push.')
+        return
+    end
+
+    local ok, handlingProfile = pcall(HandlingEngine.BuildHandlingProfile, {
         score             = data.score or 0,
         archetype         = data.archetype or 'esportivo',
         subArchetype      = data.sub_archetype,
@@ -114,6 +119,11 @@ local function PushVehicleState(netId, data, remapData, tuneData)
             brakes     = data.brakes_health     or 100,
         }
     })
+
+    if not ok or not handlingProfile then
+        print('[fish_normalizer] WARNING: BuildHandlingProfile failed: ' .. tostring(handlingProfile))
+        return
+    end
 
     entityState:set('fish:handling', handlingProfile, true)
     entityState:set('fish:heat',     (tuneData and tuneData.heat) or 0, true)

@@ -5,7 +5,7 @@
 -- client-only. Server uses BuildHandlingProfile only.
 -- ============================================================
 
-local HandlingEngine = {}
+HandlingEngine = {}
 
 -- ============================================================
 -- Handling Key Mappings
@@ -561,4 +561,3 @@ if IsDuplicityVersion and not IsDuplicityVersion() then
     end)
 end
 
-return HandlingEngine

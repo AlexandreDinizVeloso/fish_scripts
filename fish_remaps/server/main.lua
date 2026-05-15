@@ -227,15 +227,17 @@ AddEventHandler('fish_remaps:requestAllData', function()
         'SELECT * FROM fish_vehicle_remaps WHERE owner_identifier = ?', {identifier}
     )
     local allData = {}
-    if result then
+    if result and type(result) == 'table' then
         for _, row in ipairs(result) do
-            if row.stat_adjustments and type(row.stat_adjustments) == 'string' then
-                row.stat_adjustments = json.decode(row.stat_adjustments) or {}
+            if type(row) == 'table' then
+                if row.stat_adjustments and type(row.stat_adjustments) == 'string' then
+                    row.stat_adjustments = json.decode(row.stat_adjustments) or {}
+                end
+                if row.dyno and type(row.dyno) == 'string' then
+                    row.dyno = json.decode(row.dyno) or {}
+                end
+                allData[row.plate] = row
             end
-            if row.dyno and type(row.dyno) == 'string' then
-                row.dyno = json.decode(row.dyno) or {}
-            end
-            allData[row.plate] = row
         end
     end
     TriggerClientEvent('fish_remaps:receiveAllData', src, allData)

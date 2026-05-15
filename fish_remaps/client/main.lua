@@ -1,4 +1,4 @@
--- fish_remaps: Client Main
+﻿-- fish_remaps: Client Main
 local isNuiOpen = false
 local currentVehicle = nil
 local remapData = {}
@@ -96,9 +96,9 @@ function OpenRemap()
     local existing = remapData[plate]
     local adjustments = {}
     if existing then
-        adjustments = existing.adjustments or {}
-        currentArchetype = existing.currentArchetype or currentArchetype
-        currentSubArchetype = existing.currentSubArchetype or currentSubArchetype
+        adjustments = existing.stat_adjustments or existing.adjustments or {}
+        currentArchetype = existing.current_archetype or existing.currentArchetype or currentArchetype
+        currentSubArchetype = existing.sub_archetype or existing.currentSubArchetype or currentSubArchetype
     end
 
     -- Get player balance
@@ -110,12 +110,15 @@ function OpenRemap()
         balance = (playerData.money.bank or 0) + (playerData.money.cash or 0)
     end
 
+    local vehicleNetId = NetworkGetNetworkIdFromEntity(vehicle)
     local sendData = {
         action = 'openRemap',
         vehicleName = displayName,
         plate = plate,
-        originalArchetype = existing and existing.originalArchetype or currentArchetype,
+        vehicleNetId = vehicleNetId,
+        originalArchetype = (existing and (existing.original_archetype or existing.originalArchetype)) or currentArchetype,
         currentArchetype = currentArchetype,
+        subArchetype = currentSubArchetype,
         currentSubArchetype = currentSubArchetype,
         baseStats = baseStats,
         adjustments = adjustments,
@@ -129,7 +132,7 @@ function OpenRemap()
         costs = Config.Costs or {},
         stage = existing and existing.stage or 0,
         dynoSettings = existing and existing.dyno or nil,
-        transSettings = existing and { mode = existing.transMode, gearPreset = existing.gearPreset } or nil
+        transSettings = existing and { mode = existing.trans_mode or existing.transMode, gearPreset = existing.gear_preset or existing.gearPreset } or nil
     }
 
     SetNuiFocus(true, true)
