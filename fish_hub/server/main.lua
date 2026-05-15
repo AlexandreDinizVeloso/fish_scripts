@@ -4,9 +4,48 @@
 -- Chip management, weekly cleanup, police trigger hook.
 -- ============================================================
 
-local DB = nil
 local connectedClients = {}  -- { [identifier] = src }
 local weeklyCleanupTimer = 7 * 24 * 60 * 60  -- 7 days in seconds
+
+-- ============================================================
+-- DB wrappers (use fish_normalizer exports for cross-resource access)
+-- ============================================================
+
+local function DBGetVehiclesByOwner(owner)
+    return exports['fish_normalizer']:DBGetVehiclesByOwner(owner)
+end
+
+local function DBGetTunes(plate)
+    return exports['fish_normalizer']:DBGetTunes(plate)
+end
+
+local function DBGetListings(isIllegal)
+    return exports['fish_normalizer']:DBGetListings(isIllegal)
+end
+
+local function DBCreateListing(data)
+    return exports['fish_normalizer']:DBCreateListing(data)
+end
+
+local function DBDeleteListing(id, sellerId)
+    return exports['fish_normalizer']:DBDeleteListing(id, sellerId)
+end
+
+local function DBGetMessages(channel, limit)
+    return exports['fish_normalizer']:DBGetMessages(channel, limit)
+end
+
+local function DBSendMessage(channel, senderId, senderName, message)
+    return exports['fish_normalizer']:DBSendMessage(channel, senderId, senderName, message)
+end
+
+local function DBCleanExpiredListings()
+    return exports['fish_normalizer']:DBCleanExpiredListings()
+end
+
+local function DBCleanOldMessages()
+    return exports['fish_normalizer']:DBCleanOldMessages()
+end
 
 -- ============================================================
 -- Startup
@@ -14,14 +53,9 @@ local weeklyCleanupTimer = 7 * 24 * 60 * 60  -- 7 days in seconds
 
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    DB = FishDB
-    if not DB then
-        print('[fish_hub] ERROR: FishDB not available. Is fish_normalizer running?')
-        return
-    end
     -- Clean expired listings on start
-    DB.CleanExpiredListings()
-    DB.CleanOldMessages()
+    DBCleanExpiredListings()
+    DBCleanOldMessages()
 
     print('[fish_hub] Started.')
 
@@ -29,8 +63,8 @@ AddEventHandler('onResourceStart', function(resourceName)
     Citizen.CreateThread(function()
         while true do
             Citizen.Wait(weeklyCleanupTimer * 1000)
-            DB.CleanExpiredListings()
-            DB.CleanOldMessages()
+            DBCleanExpiredListings()
+            DBCleanOldMessages()
             print('[fish_hub] Weekly cleanup completed.')
         end
     end)
@@ -154,7 +188,7 @@ AddEventHandler('fish_hub:getListings', function(isIllegal)
         end
     end
 
-    local listings = DB.GetListings(isIllegal)
+    local listings = DBGetListings(isIllegal)
     TriggerClientEvent('fish_hub:receiveListings', src, listings, isIllegal)
 end)
 
@@ -181,7 +215,7 @@ AddEventHandler('fish_hub:createListing', function(data)
     data.seller_name       = playerName
     data.description       = (data.description or ''):sub(1, 300)
 
-    local id = DB.CreateListing(data)
+    local id = DBCreateListing(data)
 
     -- Broadcast to all hub clients
     TriggerClientEvent('fish_hub:listingCreated', -1, {
@@ -202,7 +236,7 @@ RegisterNetEvent('fish_hub:deleteListing')
 AddEventHandler('fish_hub:deleteListing', function(listingId)
     local src        = source
     local identifier = GetIdentifier(src)
-    DB.DeleteListing(listingId, identifier)
+    DBDeleteListing(listingId, identifier)
     TriggerClientEvent('fish_hub:listingDeleted', -1, listingId)
     TriggerClientEvent('fish_hub:notify', src, {type='success', message='Listing removed.'})
 end)
@@ -222,7 +256,7 @@ AddEventHandler('fish_hub:getMessages', function(channel)
             return
         end
     end
-    local messages = DB.GetMessages(channel, 80)
+    local messages = DBGetMessages(channel, 80)
     TriggerClientEvent('fish_hub:receiveMessages', src, channel, messages)
 end)
 
@@ -256,7 +290,7 @@ AddEventHandler('fish_hub:sendMessage', function(channel, message)
     message = message:sub(1, 500)
     if #message == 0 then return end
 
-    DB.SendMessage(channel, identifier, playerName, message)
+    DBSendMessage(channel, identifier, playerName, message)
 
     local msgData = {
         channel        = channel,
@@ -276,7 +310,7 @@ AddEventHandler('fish_hub:startDM', function(targetIdentifier)
     local src        = source
     local identifier = GetIdentifier(src)
     local channel    = DMChannel(identifier, targetIdentifier)
-    local messages   = DB.GetMessages(channel, 50)
+    local messages   = DBGetMessages(channel, 50)
     TriggerClientEvent('fish_hub:dmOpened', src, channel, messages, targetIdentifier)
 end)
 
@@ -301,12 +335,12 @@ AddEventHandler('fish_hub:getMyData', function()
     local identifier = GetIdentifier(src)
 
     -- Get all player vehicles from normalizer
-    local vehicles = DB.GetVehiclesByOwner(identifier)
+    local vehicles = DBGetVehiclesByOwner(identifier)
 
     -- Enrich with HEAT data
     local vehicleList = {}
     for plate, data in pairs(vehicles) do
-        local tuneData = DB.GetTunes(plate)
+        local tuneData = DBGetTunes(plate)
         table.insert(vehicleList, {
             plate    = plate,
             archetype = data.archetype,
@@ -324,5 +358,5 @@ end)
 -- ============================================================
 
 exports('GetHubListings', function(isIllegal)
-    return DB.GetListings(isIllegal)
+    return DBGetListings(isIllegal)
 end)

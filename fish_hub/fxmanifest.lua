@@ -10,7 +10,8 @@ dependencies {
     'oxmysql',
     'qbx_core',
     'fish_normalizer',
-    'fish_tunes'
+    'fish_tunes',
+    'fish_remaps'
 }
 
 shared_scripts {

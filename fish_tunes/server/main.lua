@@ -4,8 +4,23 @@
 -- degradation, and police trigger integration.
 -- ============================================================
 
-local DB = nil  -- set on resource start from FishDB global
 local heatCache = {}  -- { [plate] = { heat=0, lastDecay=0 } }
+
+-- ============================================================
+-- DB wrappers (use fish_normalizer exports for cross-resource access)
+-- ============================================================
+
+local function DBGetTunes(plate)
+    return exports['fish_normalizer']:DBGetTunes(plate)
+end
+
+local function DBSaveTunes(plate, data, owner)
+    return exports['fish_normalizer']:DBSaveTunes(plate, data, owner)
+end
+
+local function DBGetRemap(plate)
+    return exports['fish_normalizer']:DBGetRemap(plate)
+end
 
 -- ============================================================
 -- HEAT Constants
@@ -22,11 +37,7 @@ local HEAT_MAX             = Config and Config.MaxHeat or 100
 
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    DB = FishDB
-    if not DB then
-        print('[fish_tunes] ERROR: FishDB not available. Is fish_normalizer running?')
-        return
-    end
+    print('[fish_tunes] Started. HEAT system active.')
 
     -- Load all tune heat values into cache
     local allVehicles = MySQL.query.await('SELECT plate, heat, heat_last_decay FROM fish_vehicle_tunes', {})
@@ -120,7 +131,7 @@ end
 local function RefreshVehicleState(plate, vehicleNetId, tuneData)
     local normData  = exports['fish_normalizer']:GetVehicleDataServer(plate)
     if not normData then return end
-    local remapData = DB.GetRemap(plate)
+    local remapData = DBGetRemap(plate)
     exports['fish_normalizer']:PushVehicleState(vehicleNetId, normData, remapData, tuneData)
 end
 
@@ -177,7 +188,7 @@ AddEventHandler('fish_tunes:installPart', function(plate, category, level, vehic
 
     -- Load or create tune record
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
-    local existing   = DB.GetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
+    local existing   = DBGetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
     local parts      = existing.parts or {}
     if type(parts) == 'string' then parts = json.decode(parts) or {} end
 
@@ -205,7 +216,7 @@ AddEventHandler('fish_tunes:installPart', function(plate, category, level, vehic
     heatCache[plate]  = heatCache[plate] or { heat = 0, lastDecay = os.time() }
     heatCache[plate].heat = totalHeat
 
-    DB.SaveTunes(plate, existing, identifier)
+    DBSaveTunes(plate, existing, identifier)
 
     print(('[fish_tunes] %s installed %s %s on %s (Heat: %d, Cost: $%d)'):format(
         GetPlayerName(src), level, category, plate, totalHeat, cost
@@ -253,9 +264,9 @@ AddEventHandler('fish_tunes:convertDrivetrain', function(plate, drivetrain, vehi
     end
 
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
-    local existing   = DB.GetTunes(plate) or {}
+    local existing   = DBGetTunes(plate) or {}
     existing.drivetrain = drivetrain
-    DB.SaveTunes(plate, existing, identifier)
+    DBSaveTunes(plate, existing, identifier)
 
     if vehicleNetId and vehicleNetId > 0 then
         TriggerClientEvent('fish_tunes:applyDrivetrain', src, plate, drivetrain)
@@ -306,7 +317,7 @@ AddEventHandler('fish_tunes:repairVehicle', function(plate, partType, vehicleNet
     exports['fish_normalizer']:SaveVehicleData(plate, normData)
 
     if vehicleNetId and vehicleNetId > 0 then
-        RefreshVehicleState(plate, vehicleNetId, DB.GetTunes(plate))
+        RefreshVehicleState(plate, vehicleNetId, DBGetTunes(plate))
     end
 
     TriggerClientEvent('fish_tunes:clientNotify', src, {
@@ -322,7 +333,7 @@ end)
 RegisterNetEvent('fish_tunes:requestData')
 AddEventHandler('fish_tunes:requestData', function(plate)
     local src  = source
-    local data = DB.GetTunes(plate) or {}
+    local data = DBGetTunes(plate) or {}
     TriggerClientEvent('fish_tunes:receiveData', src, plate, data)
 end)
 
@@ -430,7 +441,7 @@ AddEventHandler('fish_tunes:requestAdvancedData', function(plate)
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
 
     -- Get tunes data
-    local tunesRow = DB.GetTunes(plate) or {}
+    local tunesRow = DBGetTunes(plate) or {}
 
     -- Get vehicle health data (from normalizer DB)
     local normData = exports['fish_normalizer']:GetVehicleDataServer(plate) or {}
@@ -469,7 +480,7 @@ AddEventHandler('fish_tunes:requestAdvancedData', function(plate)
     }
 
     -- Get dyno data (from remaps if available)
-    local remapData = DB.GetRemap(plate) or {}
+    local remapData = DBGetRemap(plate) or {}
     local dynoData = (type(remapData.dyno) == 'string') and json.decode(remapData.dyno) or (remapData.dyno or nil)
 
     -- Engine swaps & recipes
@@ -503,7 +514,7 @@ AddEventHandler('fish_tunes:saveTunes', function(plate, data)
     local _, _, totalHeat = CalculatePartTotals(parts)
     data.heat = totalHeat
 
-    DB.SaveTunes(plate, data, identifier)
+    DBSaveTunes(plate, data, identifier)
 
     -- Update heat cache
     heatCache[plate] = { heat = totalHeat, lastDecay = os.time() }
@@ -534,9 +545,9 @@ AddEventHandler('fish_tunes:setTransmissionMode', function(plate, mode)
     if not player then return end
 
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
-    local existing = DB.GetTunes(plate) or {}
+    local existing = DBGetTunes(plate) or {}
     existing.drivetrain = mode or existing.drivetrain
-    DB.SaveTunes(plate, existing, identifier)
+    DBSaveTunes(plate, existing, identifier)
 
     TriggerClientEvent('fish_tunes:clientNotify', src, {type='success', message = ('Transmission mode → %s'):format(mode or '?')})
 end)
@@ -558,9 +569,9 @@ AddEventHandler('fish_tunes:setGearRatio', function(plate, preset)
     end
 
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
-    local existing = DB.GetTunes(plate) or {}
+    local existing = DBGetTunes(plate) or {}
     existing.gear_preset = preset
-    DB.SaveTunes(plate, existing, identifier)
+    DBSaveTunes(plate, existing, identifier)
 
     TriggerClientEvent('fish_tunes:clientNotify', src, {type='success', message = ('Gear ratio → %s (-$%d)'):format(preset or '?', cost)})
 end)
@@ -611,7 +622,7 @@ AddEventHandler('fish_tunes:swapClass', function(plate, targetClass)
             local vehPlate = GetVehicleNumberPlateText(veh):gsub('%s+', '')
             if vehPlate == plate then
                 local netId = NetworkGetNetworkIdFromEntity(veh)
-                RefreshVehicleState(plate, netId, DB.GetTunes(plate))
+                RefreshVehicleState(plate, netId, DBGetTunes(plate))
             end
         end
     end
@@ -647,9 +658,9 @@ AddEventHandler('fish_tunes:applyTireCompound', function(plate, compound, vehicl
 
     -- Store tire compound in tunes data
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
-    local existing = DB.GetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
+    local existing = DBGetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
     existing.tire_compound = compound
-    DB.SaveTunes(plate, existing, identifier)
+    DBSaveTunes(plate, existing, identifier)
 
     -- Push tire compound via state bag
     if vehicleNetId and vehicleNetId > 0 then
@@ -691,7 +702,7 @@ AddEventHandler('fish_tunes:toggleVehicleFlag', function(plate, flagKey, vehicle
     end
 
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
-    local existing = DB.GetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
+    local existing = DBGetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
 
     -- Toggle: if already installed, remove it; otherwise add it
     if not existing.vehicle_flags then existing.vehicle_flags = {} end
@@ -700,7 +711,7 @@ AddEventHandler('fish_tunes:toggleVehicleFlag', function(plate, flagKey, vehicle
     else
         existing.vehicle_flags[flagKey] = flagData.value
     end
-    DB.SaveTunes(plate, existing, identifier)
+    DBSaveTunes(plate, existing, identifier)
 
     if vehicleNetId and vehicleNetId > 0 then
         local entity = NetworkGetEntityFromNetworkId(vehicleNetId)
@@ -730,7 +741,7 @@ AddEventHandler('fish_tunes:saveECUTune', function(plate, ecuData, vehicleNetId)
     if not ecuData then return end
 
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
-    local existing = DB.GetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
+    local existing = DBGetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
 
     -- Validate ECU values against config ranges
     local ecuConfig = Config.ECUTuning
@@ -744,7 +755,7 @@ AddEventHandler('fish_tunes:saveECUTune', function(plate, ecuData, vehicleNetId)
     end
 
     existing.ecu_tune = ecuData
-    DB.SaveTunes(plate, existing, identifier)
+    DBSaveTunes(plate, existing, identifier)
 
     if vehicleNetId and vehicleNetId > 0 then
         local entity = NetworkGetEntityFromNetworkId(vehicleNetId)
@@ -796,8 +807,8 @@ end)
 -- Server Exports
 -- ============================================================
 
-exports('GetVehicleTunesServer', function(plate)
-    return DB.GetTunes(plate)
+    exports('GetVehicleTunesServer', function(plate)
+    return DBGetTunes(plate)
 end)
 
 exports('GetHeatLevel', function(plate)

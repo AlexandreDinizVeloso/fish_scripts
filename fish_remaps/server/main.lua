@@ -1,18 +1,11 @@
 -- ============================================================
--- fish_remaps: Server Main (oxmysql + DNA Blend + State Bags)
+-- fish_remaps: Server Main (oxmysql via fish_normalizer exports)
+-- DNA Blend + ECU + Transmission + State Bags
 -- ============================================================
-
-local DB = nil  -- set on resource start from FishDB global
 
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    -- FishDB global is set by fish_normalizer's shared/database.lua
-    DB = FishDB
-    if not DB then
-        print('[fish_remaps] ERROR: FishDB not available. Is fish_normalizer running?')
-        return
-    end
-    print('[fish_remaps] Started. Using shared oxmysql schema.')
+    print('[fish_remaps] Started. Using fish_normalizer DB exports.')
 end)
 
 -- ============================================================
@@ -24,29 +17,31 @@ local function GetIdentifier(src)
 end
 
 -- ============================================================
+-- Helper: DB wrappers (use fish_normalizer exports)
+-- ============================================================
+
+local function DBGetRemap(plate)
+    return exports['fish_normalizer']:DBGetRemap(plate)
+end
+
+local function DBSaveRemap(plate, data, owner)
+    return exports['fish_normalizer']:DBSaveRemap(plate, data, owner)
+end
+
+local function DBGetTunes(plate)
+    return exports['fish_normalizer']:DBGetTunes(plate)
+end
+
+-- ============================================================
 -- Helper: Push handling update via normalizer export
 -- ============================================================
 
 local function RefreshVehicleState(plate, vehicleNetId)
     local normData = exports['fish_normalizer']:GetVehicleDataServer(plate)
     if not normData then return end
-    local remapData = DB.GetRemap(plate)
-    local tuneData  = DB.GetTunes(plate)
+    local remapData = DBGetRemap(plate)
+    local tuneData  = DBGetTunes(plate)
     exports['fish_normalizer']:PushVehicleState(vehicleNetId, normData, remapData, tuneData)
-end
-
--- ============================================================
--- DNA Inheritance Blend (75% new / 25% original)
--- Applied when archetype changes. Sub-archetype is 100% new.
--- ============================================================
-
-local function BlendArchetypeStats(originalArchetype, newArchetype, statAdjustments)
-    -- The blend is handled in the handling engine via BuildHandlingProfile.
-    -- Here we only need to persist the original/current archetype correctly.
-    return {
-        original_archetype = originalArchetype,
-        current_archetype  = newArchetype,
-    }
 end
 
 -- ============================================================
@@ -65,7 +60,7 @@ AddEventHandler('fish_remaps:confirmRemap', function(plate, data, vehicleNetId)
     end
 
     local identifier = GetIdentifier(src)
-    local existing   = DB.GetRemap(plate)
+    local existing   = DBGetRemap(plate)
     local costs      = Config.Costs or {}
     local totalCost  = 0
 
@@ -125,7 +120,7 @@ AddEventHandler('fish_remaps:confirmRemap', function(plate, data, vehicleNetId)
     data.total_cost = (existing and existing.total_cost or 0) + totalCost
 
     -- Save to DB
-    DB.SaveRemap(plate, data, identifier)
+    DBSaveRemap(plate, data, identifier)
 
     print(('[fish_remaps] %s remapped %s → archetype:%s sub:%s ($%d)'):format(
         GetPlayerName(src), plate,
@@ -163,9 +158,9 @@ AddEventHandler('fish_remaps:saveDyno', function(plate, dynoData, vehicleNetId)
     end
 
     local identifier = GetIdentifier(src)
-    local existing   = DB.GetRemap(plate) or {}
+    local existing   = DBGetRemap(plate) or {}
     existing.dyno    = dynoData
-    DB.SaveRemap(plate, existing, identifier)
+    DBSaveRemap(plate, existing, identifier)
 
     if vehicleNetId and vehicleNetId > 0 then
         RefreshVehicleState(plate, vehicleNetId)
@@ -186,8 +181,8 @@ AddEventHandler('fish_remaps:saveTransmission', function(plate, transData, vehic
 
     local costs = Config.Costs or {}
     local cost  = 0
-    if transData.mode     then cost = cost + (costs.trans_mode  or 3000) end
-    if transData.gearPreset then cost = cost + (costs.gear_ratio or 5000) end
+    if transData.mode       then cost = cost + (costs.trans_mode   or 3000) end
+    if transData.gearPreset then cost = cost + (costs.gear_ratio   or 5000) end
 
     if cost > 0 and not player.Functions.RemoveMoney('bank', cost, 'trans-tune') then
         TriggerClientEvent('fish_remaps:notify', src, {type='error', message=('Need $%d'):format(cost)})
@@ -195,10 +190,10 @@ AddEventHandler('fish_remaps:saveTransmission', function(plate, transData, vehic
     end
 
     local identifier = GetIdentifier(src)
-    local existing   = DB.GetRemap(plate) or {}
-    if transData.mode       then existing.trans_mode  = transData.mode end
-    if transData.gearPreset then existing.gear_preset = transData.gearPreset end
-    DB.SaveRemap(plate, existing, identifier)
+    local existing   = DBGetRemap(plate) or {}
+    if transData.mode       then existing.trans_mode   = transData.mode end
+    if transData.gearPreset then existing.gear_preset  = transData.gearPreset end
+    DBSaveRemap(plate, existing, identifier)
 
     if vehicleNetId and vehicleNetId > 0 then
         RefreshVehicleState(plate, vehicleNetId)
@@ -214,7 +209,7 @@ end)
 RegisterNetEvent('fish_remaps:requestData')
 AddEventHandler('fish_remaps:requestData', function(plate)
     local src = source
-    local data = DB.GetRemap(plate) or {}
+    local data = DBGetRemap(plate) or {}
     TriggerClientEvent('fish_remaps:receiveData', src, plate, data)
 end)
 
@@ -227,7 +222,7 @@ RegisterNetEvent('fish_remaps:requestAllData')
 AddEventHandler('fish_remaps:requestAllData', function()
     local src = source
     local identifier = GetIdentifier(src)
-    -- Query all remaps belonging to this player
+    -- Query all remaps belonging to this player via normalizer export
     local result = MySQL.query.await(
         'SELECT * FROM fish_vehicle_remaps WHERE owner_identifier = ?', {identifier}
     )
@@ -251,5 +246,5 @@ end)
 -- ============================================================
 
 exports('GetVehicleRemapDataServer', function(plate)
-    return DB.GetRemap(plate)
+    return DBGetRemap(plate)
 end)
