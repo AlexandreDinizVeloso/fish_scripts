@@ -32,7 +32,6 @@ AddEventHandler('fish_hub:opened', function(data)
         action     = 'opened',
         name       = data.name,
         chips      = data.chips,
-        identifier = GetPlayerIdentifier(PlayerId(), 0) or '',
     })
 end)
 

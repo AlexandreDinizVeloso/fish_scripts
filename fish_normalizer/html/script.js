@@ -117,15 +117,26 @@ function buildStatsPanel() {
 }
 
 function recalcScore() {
-  // Simple preview: sum of weighted stats with archetype modifier
-  const stats = nData.stats || {};
-  const topSpeed = stats.top_speed || 0;
-  const accel    = stats.acceleration || 0;
-  const handling = stats.handling || 0;
-  const braking  = stats.braking || 0;
-  const base = (topSpeed * 0.35) + (accel * 0.25) + (handling * 0.25) + (braking * 0.15);
-  nData.score = Math.min(999, Math.round(base));
+  // Use the server-calculated score as base, then update rank display
+  // The server already applies archetype modifiers and weights correctly
+  if (!nData.score || nData.score === 0) {
+    // Fallback: simple calculation from normalized stats
+    const stats = nData.stats || {};
+    const topSpeed = stats.top_speed || 0;
+    const accel    = stats.acceleration || 0;
+    const handling = stats.handling || 0;
+    const braking  = stats.braking || 0;
+    nData.score = Math.min(999, Math.round((topSpeed * 0.30 + accel * 0.30 + handling * 0.25 + braking * 0.15) * 10));
+  }
+  // Determine rank from score
+  if (nData.score >= 1000) nData.rank = 'X';
+  else if (nData.score >= 900) nData.rank = 'S';
+  else if (nData.score >= 750) nData.rank = 'A';
+  else if (nData.score >= 500) nData.rank = 'B';
+  else nData.rank = 'C';
+
   document.getElementById('scorePreview').textContent = nData.score;
+  updateRankBadge();
 }
 
 function saveNormalization() {
@@ -156,16 +167,17 @@ window.addEventListener('message', e => {
   if (msg.action === 'openNormalizer') {
     nData.plate        = msg.plate || '';
     nData.vehicleNetId = msg.vehicleNetId || 0;
-    nData.archetype    = (msg.existing && msg.existing.archetype) || 'esportivo';
-    nData.subArchetype = (msg.existing && msg.existing.sub_archetype) || null;
-    nData.rank         = (msg.existing && msg.existing.rank) || 'C';
-    nData.score        = (msg.existing && msg.existing.score) || 0;
-    nData.stats        = (msg.existing && msg.existing.stats) || {};
+    nData.archetype    = msg.currentArchetype || msg.archetype || 'esportivo';
+    nData.subArchetype = msg.currentSubArchetype || null;
+    nData.rank         = 'C';  // will be recalculated
+    nData.score        = msg.baseScore || 0;
+    nData.stats        = msg.stats || {};
 
     document.getElementById('vehName').textContent  = msg.vehicleName || '—';
     document.getElementById('vehPlate').textContent = nData.plate || '———————';
     document.getElementById('scorePreview').textContent = nData.score;
 
+    recalcScore();
     buildArchetypeGrid();
     buildSubGrid();
     buildRankSelector();

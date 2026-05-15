@@ -1,6 +1,6 @@
 -- ============================================================
 -- fish_normalizer: Server Main (oxmysql + Entity State Bags)
--- Admin-only normalization. Provides exports for all modules.
+-- Vehicle normalization open to all players. Provides exports for all modules.
 -- ============================================================
 
 local vehicleDataCache = {}  -- in-memory cache keyed by plate
@@ -136,22 +136,13 @@ AddEventHandler('fish_normalizer:requestData', function()
 end)
 
 -- ============================================================
--- Net Event: Save normalization data (admin only)
+-- Net Event: Save normalization data
 -- ============================================================
 
 RegisterNetEvent('fish_normalizer:saveData')
 AddEventHandler('fish_normalizer:saveData', function(plate, data, vehicleNetId)
     local src = source
     if not plate or not data then return end
-
-    -- Admin check
-    if not IsAdmin(src) then
-        TriggerClientEvent('fish_normalizer:notify', src, {
-            type = 'error',
-            message = 'You do not have permission to normalize vehicles.'
-        })
-        return
-    end
 
     local identifier = GetIdentifier(src)
     data.owner_identifier = identifier
@@ -160,7 +151,7 @@ AddEventHandler('fish_normalizer:saveData', function(plate, data, vehicleNetId)
     FishDB.SaveVehicle(plate, data, identifier)
     vehicleDataCache[plate] = data
 
-    print(('[fish_normalizer] Admin %s normalized vehicle %s → %s (%d PI)'):format(
+    print(('[fish_normalizer] %s normalized vehicle %s → %s (%d PI)'):format(
         GetPlayerName(src), plate, data.rank or '?', data.score or 0
     ))
 
@@ -179,19 +170,12 @@ AddEventHandler('fish_normalizer:saveData', function(plate, data, vehicleNetId)
 end)
 
 -- ============================================================
--- Net Event: Request normalization NUI open (admin only)
+-- Net Event: Request normalization NUI open
 -- ============================================================
 
 RegisterNetEvent('fish_normalizer:requestOpen')
 AddEventHandler('fish_normalizer:requestOpen', function(plate, vehicleNetId)
     local src = source
-    if not IsAdmin(src) then
-        TriggerClientEvent('fish_normalizer:notify', src, {
-            type = 'error',
-            message = 'You do not have permission to use the normalizer.'
-        })
-        return
-    end
 
     -- Load existing data
     local existing  = vehicleDataCache[plate] or FishDB.GetVehicle(plate) or {}

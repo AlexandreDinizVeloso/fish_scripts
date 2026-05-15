@@ -163,8 +163,23 @@ function submitListing(isIllegal) {
   if (!data.category || data.price < 0) { showToast('Please fill all fields.', 'error'); return; }
   fetch('https://fish_hub/createListing', { method: 'POST', body: JSON.stringify(data) });
   showToast('Listing posted!', 'success');
+  // Don't re-render immediately — the server will broadcast listingCreated which updates the state
   hubState.currentPanel = isIllegal ? 'market-illegal' : 'market-legal';
-  renderCurrentPanel();
+  // Switch back to market view (empty initially, will populate when listingCreated arrives)
+  const navItem = document.querySelector(`.nav-item[data-panel="${hubState.currentPanel}"]`) || document.querySelector('.nav-item');
+  if (navItem) {
+    switchPanel(hubState.currentPanel, navItem);
+  } else {
+    // Fallback: manually update header and show loading state
+    const titles = PANEL_TITLES[hubState.currentPanel] || ['Marketplace', ''];
+    document.getElementById('panelTitle').innerHTML = `${titles[0]} <span>${titles[1]}</span>`;
+    const content = document.getElementById('mainContent');
+    content.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:40px">Posting...</div>';
+    // Request fresh listings from server after a short delay
+    setTimeout(() => {
+      fetch('https://fish_hub/getListings', { method: 'POST', body: JSON.stringify({ isIllegal }) });
+    }, 500);
+  }
 }
 
 function viewListing(id) {
@@ -213,7 +228,17 @@ function switchChannel(ch) {
 function formatMessage(m) {
   const isMine = m.sender_identifier === hubState.myIdentifier;
   const isSystem = m.sender_identifier === 'system';
-  const time = m.sent_at ? m.sent_at.substring(11, 16) : '';
+  // sent_at may be a string "YYYY-MM-DD HH:MM:SS" or a Date/timestamp object
+  let time = '';
+  if (m.sent_at) {
+    if (typeof m.sent_at === 'string') {
+      time = m.sent_at.length >= 16 ? m.sent_at.substring(11, 16) : m.sent_at;
+    } else if (m.sent_at instanceof Date) {
+      time = m.sent_at.toTimeString().substring(0, 5);
+    } else {
+      time = String(m.sent_at).substring(0, 5);
+    }
+  }
   return `<div class="chat-msg ${isMine ? 'mine' : ''} ${isSystem ? 'system' : ''}">
     <div class="chat-msg-header">
       <span class="chat-sender">${isSystem ? 'SYSTEM' : m.sender_name}</span>
@@ -387,6 +412,11 @@ window.addEventListener('message', e => {
     const listing = msg.listing || msg;
     if (listing.is_illegal) hubState.illegalListings.unshift(listing);
     else hubState.listings.unshift(listing);
+    // Re-render market if currently viewing it
+    if (hubState.currentPanel === 'market-legal' && !listing.is_illegal ||
+        hubState.currentPanel === 'market-illegal' && listing.is_illegal) {
+      renderCurrentPanel();
+    }
   }
 
   if (msg.action === 'listingDeleted') {

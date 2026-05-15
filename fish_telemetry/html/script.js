@@ -283,6 +283,27 @@ window.addEventListener('message', e => {
         renderVersionPills();
         refreshTable();
       }
+      // Auto-copy to clipboard via JS Clipboard API
+      if (msg.clipboard && msg.clipboardText) {
+        navigator.clipboard.writeText(msg.clipboardText).catch(() => {});
+      }
+      break;
+
+    case 'copyToClipboard':
+      // Lua sends text here for JS to copy
+      if (msg.text) {
+        navigator.clipboard.writeText(msg.text).then(() => {
+          document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">check</span> Copied!';
+          setTimeout(() => {
+            document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">content_copy</span> Copy Results';
+          }, 2000);
+        }).catch(() => {});
+      }
+      break;
+
+    case 'hide':
+      // Auto-hide: remove visible class to make NUI disappear
+      document.body.classList.remove('visible');
       break;
   }
 });

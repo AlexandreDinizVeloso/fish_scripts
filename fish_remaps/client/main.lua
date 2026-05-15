@@ -126,6 +126,8 @@ function OpenRemap()
         statColors = Config.StatColors,
         existingRemap = existing ~= nil,
         balance = balance,
+        costs = Config.Costs or {},
+        stage = existing and existing.stage or 0,
         dynoSettings = existing and existing.dyno or nil,
         transSettings = existing and { mode = existing.transMode, gearPreset = existing.gearPreset } or nil
     }
@@ -352,10 +354,18 @@ AddEventHandler('fish_remaps:notify', function(data)
     ShowNotification(msg)
 end)
 
--- Remap applied confirmation
+-- Remap applied confirmation (convert snake_case server data to camelCase for client cache)
 RegisterNetEvent('fish_remaps:remapApplied')
 AddEventHandler('fish_remaps:remapApplied', function(plate, data)
-    remapData[plate] = data
+    remapData[plate] = {
+        originalArchetype   = data.original_archetype,
+        currentArchetype    = data.current_archetype,
+        currentSubArchetype = data.sub_archetype,
+        adjustments         = data.stat_adjustments or {},
+        blendedStats        = data.blended_stats or {},
+        finalStats          = data.final_stats or {},
+        stage               = data.stage or 0,
+    }
 end)
 
 function ShowNotification(msg)

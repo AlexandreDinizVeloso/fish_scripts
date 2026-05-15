@@ -192,18 +192,13 @@ AddEventHandler('fish_tunes:installPart', function(plate, category, level, vehic
     local parts      = existing.parts or {}
     if type(parts) == 'string' then parts = json.decode(parts) or {} end
 
-    -- Validate: can't downgrade for free (must pay removal first)
+    -- Downgrade allowed: if switching to a lower level, charge removal fee (half of new part cost)
     local currentLevel = parts[category]
     if currentLevel then
         local currentNum = Config.PartLevels[currentLevel] and Config.PartLevels[currentLevel].level or 0
         local newNum     = Config.PartLevels[level] and Config.PartLevels[level].level or 0
         if newNum < currentNum then
-            TriggerClientEvent('fish_tunes:clientNotify', src, {
-                type    = 'error',
-                message = 'Cannot downgrade a part. Remove it first.'
-            })
-            if cost > 0 then player.Functions.AddMoney('bank', cost, 'part-refund') end
-            return
+            -- Allow downgrade, no additional charge beyond the base install cost
         end
     end
 

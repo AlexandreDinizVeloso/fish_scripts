@@ -15,7 +15,7 @@ local HandlingEngine = {}
 -- Base reference values for a "neutral" stock vehicle
 local BASE_HANDLING = {
     -- Drive
-    fInitialDriveMaxFlatVel        = 55.0,   -- ~200 km/h at default
+    fInitialDriveMaxFlatVel        = 70.0,   -- tuned for ~210 km/h class A esportivo
     fInitialDriveForce             = 0.32,
     fDriveInertia                  = 1.0,
     fDriveBiasFront                = 0.5,    -- 0.0=RWD, 1.0=FWD, 0.5=AWD
@@ -130,7 +130,7 @@ local ARCHETYPE_PROFILES = {
     },
     exotico = {
         -- Top speed king, stable acceleration
-        fInitialDriveMaxFlatVel        = 1.28,
+        fInitialDriveMaxFlatVel        = 1.08,
         fInitialDriveForce             = 1.05,
         fDriveInertia                  = 0.95,
         fTractionCurveMax              = 1.00,
@@ -159,7 +159,7 @@ local ARCHETYPE_PROFILES = {
     },
     supercarro = {
         -- Balanced excellence
-        fInitialDriveMaxFlatVel        = 1.15,
+        fInitialDriveMaxFlatVel        = 1.08,
         fInitialDriveForce             = 1.15,
         fDriveInertia                  = 1.05,
         fTractionCurveMax              = 1.15,
@@ -485,21 +485,28 @@ function HandlingEngine.BuildHandlingProfile(params)
     profile.fSuspensionDampingReboundSlow = (profile.fSuspensionDampingReboundSlow or 1.0) * suspMult
     profile.fBrakeForce             = (profile.fBrakeForce or 1.0)           * brakesMult
 
-    -- Step 6: Multiply by base handling absolute values
+    -- Step 6: Multiply ALL base handling keys by their multipliers
+    -- This ensures all 30+ handling keys are always applied
     local finalHandling = {}
-    for key, multiplier in pairs(profile) do
-        local base = BASE_HANDLING[key]
-        if base then
-            finalHandling[key] = base * multiplier
-        end
+    for key, base in pairs(BASE_HANDLING) do
+        local multiplier = profile[key] or 1.0
+        finalHandling[key] = base * multiplier
     end
 
-    -- Direct-value fields (bias/proportions 0-1, NOT multiplied by base)
-    finalHandling.fBrakeBiasFront      = profile.fBrakeBiasFront or 0.50
-    finalHandling.fBrakeBiasRear       = 1.0 - (profile.fBrakeBiasFront or 0.50)
-    finalHandling.fDriveBiasFront      = profile.fDriveBiasFront or 0.50
-    finalHandling.fSuspensionBiasFront = profile.fSuspensionBiasFront or 0.50
-    finalHandling.fTractionBiasFront   = profile.fTractionBiasFront or 0.50
+    -- Direct-value fields (bias/proportions/percentages — NOT multiplied by base)
+    -- These are set as direct values in the archetype profiles, not multipliers
+    local directValueFields = {
+        'fBrakeBiasFront', 'fBrakeBiasRear', 'fDriveBiasFront',
+        'fSuspensionBiasFront', 'fTractionBiasFront',
+        'fPercentSubmerged',
+    }
+    for _, key in ipairs(directValueFields) do
+        if profile[key] then
+            finalHandling[key] = profile[key]
+        end
+    end
+    -- Derived fields
+    finalHandling.fBrakeBiasRear = 1.0 - (finalHandling.fBrakeBiasFront or 0.50)
 
     return finalHandling
 end

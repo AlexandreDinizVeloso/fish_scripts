@@ -341,13 +341,9 @@ AddEventHandler('fish_normalizer:setAdminStatus', function(status)
     isAdmin = status
 end)
 
--- Register command (admin only)
+-- Register command (open to all players)
 RegisterCommand('normalize', function()
     if isNuiOpen then return end
-    if not isAdmin then
-        ShowNotification('~r~You do not have permission to use the normalizer.')
-        return
-    end
     OpenNormalizer()
 end, false)
 
@@ -472,63 +468,84 @@ Citizen.CreateThread(function()
             local pos    = GetEntityCoords(ped)
             local vehicles = GetGamePool('CVehicle')
 
-            for _, veh in ipairs(vehicles) do
-                if DoesEntityExist(veh) then
-                    local vehPos = GetEntityCoords(veh)
-                    local dist   = #(pos - vehPos)
-                    if dist < 40.0 then
-                        -- Prefer state bag (synced from server)
-                        local netId  = NetworkGetNetworkIdFromEntity(veh)
-                        local bagScore = Entity(veh).state['fish:score']
-                        local bagRank  = Entity(veh).state['fish:rank']
+        for _, veh in ipairs(vehicles) do
+            if DoesEntityExist(veh) then
+                local vehPos = GetEntityCoords(veh)
+                local dist   = #(pos - vehPos)
+                if dist < 40.0 then
+                    local displayScore = nil
+                    local displayRank  = nil
+                    local rankColor    = '#8B8B8B' -- default gray
 
-                        local displayScore = bagScore
-                        local displayRank  = bagRank
+                    -- 1. Try state bag first (synced from server for normalized vehicles)
+                    local bagScore = Entity(veh).state['fish:score']
+                    local bagRank  = Entity(veh).state['fish:rank']
 
-                        -- Fall back to local calculation if no state bag
-                        if not displayScore then
-                            local result = GetVehicleRank(veh)
-                            if result then
-                                displayScore = result.score
-                                displayRank  = result.rank and result.rank.name
-                            end
+                    if bagScore and bagScore > 0 and bagRank then
+                        displayScore = bagScore
+                        displayRank  = bagRank
+                        -- Find color for this rank
+                        for _, r in ipairs(Config.Ranks) do
+                            if r.name == displayRank then rankColor = r.color; break end
                         end
+                    else
+                        -- 2. Calculate locally for any vehicle (raw model stats)
+                        local result = GetVehicleRank(veh)
+                        if result and result.score then
+                            displayScore = result.score
+                            displayRank  = result.rank and result.rank.name or '?'
+                            rankColor    = (result.rank and result.rank.color) or '#8B8B8B'
+                        end
+                    end
 
-                        if displayScore and displayRank then
-                            -- Get rank color
-                            local rankColor = '#FFFFFF'
-                            for _, r in ipairs(Config.Ranks) do
-                                if r.name == displayRank then rankColor = r.color; break end
-                            end
-
-                            local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
-                            if onScreen then
-                                local r = tonumber(rankColor:sub(2,3), 16) or 255
-                                local g = tonumber(rankColor:sub(4,5), 16) or 255
-                                local b = tonumber(rankColor:sub(6,7), 16) or 255
-                                SetTextScale(0.38, 0.38)
-                                SetTextFont(4)
-                                SetTextProportional(true)
-                                SetTextColour(r, g, b, 255)
-                                SetTextDropshadow(2, 0, 0, 0, 200)
-                                SetTextEdge(1, 0, 0, 0, 140)
-                                SetTextDropShadow()
-                                SetTextOutline()
-                                SetTextEntry('STRING')
-                                AddTextComponentString(displayRank .. ': ' .. displayScore)
-                                DrawText(screenX, screenY)
-                            end
+                    if displayScore and displayRank then
+                        local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
+                        if onScreen then
+                            local cr = tonumber(rankColor:sub(2,3), 16) or 139
+                            local cg = tonumber(rankColor:sub(4,5), 16) or 139
+                            local cb = tonumber(rankColor:sub(6,7), 16) or 139
+                            SetTextScale(0.38, 0.38)
+                            SetTextFont(4)
+                            SetTextProportional(true)
+                            SetTextColour(cr, cg, cb, 255)
+                            SetTextDropshadow(2, 0, 0, 0, 200)
+                            SetTextEdge(1, 0, 0, 0, 140)
+                            SetTextDropShadow()
+                            SetTextOutline()
+                            SetTextEntry('STRING')
+                            AddTextComponentString(displayRank .. ': ' .. displayScore)
+                            DrawText(screenX, screenY)
                         end
                     end
                 end
             end
+        end
         else
             Citizen.Wait(200)  -- idle poll when K not held
         end
     end
 end)
 
--- Export: GetArchetypeModifier
+-- ============================================================
+-- Client Exports (must be explicit — fxmanifest exports{} is just validation)
+-- ============================================================
+
+exports('GetVehicleRank', function(vehicle)
+    return GetVehicleRank(vehicle)
+end)
+
+exports('GetVehicleArchetype', function(vehicle)
+    return GetVehicleArchetype(vehicle)
+end)
+
+exports('GetVehicleScore', function(vehicle)
+    return GetVehicleScore(vehicle)
+end)
+
+exports('GetVehicleData', function(vehicle)
+    return GetVehicleData(vehicle)
+end)
+
 exports('GetArchetypeModifier', function(archetypeKey, statKey)
     local archetype = Config.Archetypes[archetypeKey]
     if archetype and archetype.statModifiers then
