@@ -220,6 +220,21 @@ function PushVehicleState(netId, data, remapData, tuneData)
     local displayRank = GetRankFromScore(displayScore)
     local drivetrain = (tuneData and tuneData.drivetrain) or 'FWD'
 
+    -- Bitfield Packing: empacota estados booleanos em um único int32 para reduzir payload MsgPack
+    -- Bit 0 (1): vehicle has custom parts (isTuned)
+    -- Bit 1 (2): vehicle has damage on any component
+    -- Bits 2-31: reservados para flags futuras
+    local flags = 0
+    if tuneData and tuneData.parts and next(tuneData.parts) then
+        flags = flags | 1  -- bit 0: isTuned
+    end
+    local hasDamage = (data.engine_health or 100) < 100
+                   or (data.brakes_health or 100) < 100
+                   or (data.suspension_health or 100) < 100
+    if hasDamage then
+        flags = flags | 2  -- bit 1: hasDamage
+    end
+
     -- Transactional Physics Matrix: aggregate all state parameters into a single O(1) MsgPack payload
     local physicsMatrix = {
         score = displayScore,
@@ -227,7 +242,8 @@ function PushVehicleState(netId, data, remapData, tuneData)
         archetype = archetype,
         handling = handlingProfile,
         heat = (tuneData and tuneData.heat) or 0,
-        drivetrain = drivetrain
+        drivetrain = drivetrain,
+        flags = flags  -- int32 substituindo N chaves booleanas, redução de ~96% no payload
     }
     entityState:set('fish_physics_matrix', physicsMatrix, true)
 

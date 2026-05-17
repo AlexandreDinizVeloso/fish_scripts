@@ -501,11 +501,11 @@ CreateThread(function()
                 if DoesEntityExist(veh) then
                     local vehPos = GetEntityCoords(veh)
                     
-                    -- Cálculo de distância ao quadrado (evita overhead de FPU da raiz quadrada)
-                    local distSq = (pos.x - vehPos.x)^2 + (pos.y - vehPos.y)^2 + (pos.z - vehPos.z)^2
+                    -- Cálculo de distância via SIMD (GLM nativo em C++): #(pos - vehPos) executa
+                    -- subtração vetorial e magnitude em registradores SIMD, sem chamadas __index ao interpretador
+                    local dist = #(pos - vehPos)
                     
-                    -- 2500.0 equivale a 50.0 metros de raio ao quadrado
-                    if distSq <= 2500.0 then
+                    if dist <= 50.0 then
                         local displayScore = nil
                         local displayRank  = nil
                         local rankColor    = '#8B8B8B'
@@ -514,6 +514,13 @@ CreateThread(function()
                         local matrix = Entity(veh).state['fish_physics_matrix']
                         local bagScore = matrix and matrix.score
                         local bagRank  = matrix and matrix.rank
+
+                        -- Bitfield decoding: extrai flags em operações bitwise O(1) na ALU
+                        -- flags é um int32 do server: bit 0 (isTuned), bit 1 (hasDamage)
+                        local flags = matrix and matrix.flags or 0
+                        local isTuned   = (flags & 1) ~= 0  -- custom parts instalados
+                        local hasDamage = (flags & 2) ~= 0  -- algum componente com saúde < 100
+                        -- Reservado: bit 2 (isPolice), bit 3-31 para flags futuras
 
                         if bagScore and bagScore > 0 and bagRank then
                             displayScore = bagScore
