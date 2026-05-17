@@ -52,7 +52,8 @@ exports {
     'ForceHandlingRefresh',
     'DegradeTires',
     'GetTireHealth',
-    'SetTireHealth'
+    'SetTireHealth',
+    'GetPartBonuses'
 }
 
 server_exports {

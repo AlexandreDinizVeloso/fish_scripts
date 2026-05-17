@@ -58,77 +58,29 @@ end
 function ApplyDrivetrainModifiers(vehicle, drivetrainType)
     if not DoesEntityExist(vehicle) then return end
     
-    local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
-    
-    -- Store original values on first call
-    if not originalHandlingCache[plate] then
-        originalHandlingCache[plate] = {
-            fInitialDriveForce = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveForce'),
-            fInitialDriveMaxFlatVel = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveMaxFlatVel'),
-            fSteeringLock = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock'),
-            fTractionBiasFront = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionBiasFront'),
-            fTractionCurveMax = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMax'),
-            fTractionCurveMin = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMin')
-        }
-    end
-    
-    local orig = originalHandlingCache[plate]
     local driveBias = 0.5
-    local forceMult = 1.0
-    local topSpeedMult = 1.0
-    local steeringMult = 1.0
     local tractionFrontBias = 0.5
-    local tractionMult = 1.0
     
     if drivetrainType == "RWD" then
         driveBias = 0.0
-        forceMult = 1.10      -- 10% more force to compensate for rear-only
-        topSpeedMult = 1.0     -- no top speed change
-        steeringMult = 1.05    -- slightly more responsive
         tractionFrontBias = 0.45
-        tractionMult = 0.95    -- slightly less front grip
-        
     elseif drivetrainType == "FWD" then
         driveBias = 1.0
-        forceMult = 1.10      -- 10% more force
-        topSpeedMult = 0.95    -- 5% less top speed
-        steeringMult = 0.95    -- slightly less responsive
         tractionFrontBias = 0.55
-        tractionMult = 1.05    -- more front grip
-        
     elseif drivetrainType == "AWD" then
         driveBias = 0.5
-        forceMult = 1.25      -- 25% more force to compensate for drivetrain loss
-        topSpeedMult = 0.90    -- 10% less top speed
-        steeringMult = 1.0
         tractionFrontBias = 0.5
-        tractionMult = 1.15    -- more grip overall for AWD
     end
     
-    -- Apply all handling changes
+    -- Apply drive layout configuration only (safe fields)
     SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fDriveBiasFront', driveBias)
-    SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveForce', orig.fInitialDriveForce * forceMult)
-    SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fSteeringLock', orig.fSteeringLock * steeringMult)
     SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionBiasFront', tractionFrontBias)
-    SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMax', orig.fTractionCurveMax * tractionMult)
-    SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMin', orig.fTractionCurveMin * tractionMult)
-    
-    -- Apply top speed change
-    local newMaxSpeed = orig.fInitialDriveMaxFlatVel * topSpeedMult
-    SetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveMaxFlatVel', newMaxSpeed)
     
     -- Force handling changes to take effect (FiveM workaround)
     ForceHandlingRefresh(vehicle)
     
     -- Set individual wheel power for accurate drivetrain simulation
     SetWheelPower(vehicle, drivetrainType)
-    
-    -- Force physics update with actual speed multiplier
-    ModifyVehicleTopSpeed(vehicle, topSpeedMult)
-    
-    -- Set entity max speed (1.3x factor accounts for handling-to-actual speed difference)
-    -- fInitialDriveMaxFlatVel is in mph, convert to m/s
-    SetEntityMaxSpeed(vehicle, (newMaxSpeed * 1.3) / 2.236936)
 end
 
 function ClearDrivetrainCache(plate)

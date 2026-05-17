@@ -422,6 +422,7 @@ AddEventHandler('fish_tunes:receiveData', function(plate, data)
     -- Updated: now receives plate + data (not whole cache)
     if plate and data then
         tunesData[plate] = data
+        TriggerEvent('fish_tunes:performanceUpdated', plate, data)
     end
 end)
 
@@ -445,6 +446,7 @@ AddEventHandler('fish_tunes:partInstalled', function(result)
         if not tunesData[plate].parts then tunesData[plate].parts = {} end
         tunesData[plate].parts[category] = level
         tunesData[plate].heat = result.heat or 0
+        TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
     end
     -- Update NUI if open
     if isNuiOpen then
@@ -485,8 +487,11 @@ RegisterNetEvent('fish_tunes:applyDrivetrain')
 AddEventHandler('fish_tunes:applyDrivetrain', function(plate, drivetrain)
     local vehicle = GetCurrentVehicle()
     if vehicle then
+        if not tunesData[plate] then tunesData[plate] = {} end
+        tunesData[plate].drivetrain = drivetrain
         exports.fish_tunes:ApplyDrivetrainModifiers(vehicle, drivetrain)
         exports.fish_tunes:ClearDrivetrainCache(plate)
+        TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
     end
 end)
 
@@ -528,3 +533,10 @@ function ShowNotification(msg)
     AddTextComponentString(msg)
     DrawNotification(false, false)
 end
+
+exports('GetPartBonuses', function(category, level)
+    if Config.PartBonuses and Config.PartBonuses[category] and Config.PartBonuses[category][level] then
+        return Config.PartBonuses[category][level]
+    end
+    return nil
+end)

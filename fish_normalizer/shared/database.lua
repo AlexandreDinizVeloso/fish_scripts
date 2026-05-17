@@ -54,6 +54,7 @@ function DB.CreateTables()
             `current_archetype`     VARCHAR(50) DEFAULT NULL,
             `sub_archetype`         VARCHAR(50) DEFAULT NULL,
             `stat_adjustments`      JSON DEFAULT NULL,
+            `final_stats`           JSON DEFAULT NULL,
             `dyno`                  JSON DEFAULT NULL,
             `gear_preset`           VARCHAR(20) DEFAULT 'stock',
             `trans_mode`            VARCHAR(20) DEFAULT 'auto',
@@ -100,6 +101,11 @@ function DB.CreateTables()
     -- Ensure price column is BIGINT for existing tables
     pcall(function()
         MySQL.query.await('ALTER TABLE `fish_hub_listings` MODIFY COLUMN `price` BIGINT DEFAULT 0;')
+    end)
+
+    -- Ensure final_stats column exists in fish_vehicle_remaps
+    pcall(function()
+        MySQL.query.await('ALTER TABLE `fish_vehicle_remaps` ADD COLUMN `final_stats` JSON DEFAULT NULL;')
     end)
 
     -- Hub chat messages (global + private DMs)
@@ -233,6 +239,9 @@ function DB.GetRemap(plate)
         if row.stat_adjustments and type(row.stat_adjustments) == 'string' then
             row.stat_adjustments = json.decode(row.stat_adjustments) or {}
         end
+        if row.final_stats and type(row.final_stats) == 'string' then
+            row.final_stats = json.decode(row.final_stats) or {}
+        end
         if row.dyno and type(row.dyno) == 'string' then
             row.dyno = json.decode(row.dyno) or {}
         end
@@ -246,15 +255,16 @@ function DB.SaveRemap(plate, data, ownerIdentifier)
     MySQL.query.await([[
         INSERT INTO fish_vehicle_remaps
             (plate, owner_identifier, original_archetype, current_archetype,
-             sub_archetype, stat_adjustments, dyno, gear_preset,
+             sub_archetype, stat_adjustments, final_stats, dyno, gear_preset,
              trans_mode, stage, total_cost)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
             owner_identifier = VALUES(owner_identifier),
             original_archetype = VALUES(original_archetype),
             current_archetype = VALUES(current_archetype),
             sub_archetype = VALUES(sub_archetype),
             stat_adjustments = VALUES(stat_adjustments),
+            final_stats = VALUES(final_stats),
             dyno = VALUES(dyno),
             gear_preset = VALUES(gear_preset),
             trans_mode = VALUES(trans_mode),
@@ -268,6 +278,7 @@ function DB.SaveRemap(plate, data, ownerIdentifier)
         data.current_archetype or nil,
         data.sub_archetype or nil,
         json.encode(data.stat_adjustments or {}),
+        json.encode(data.final_stats or data.finalStats or {}),
         json.encode(data.dyno or {}),
         data.gear_preset or 'stock',
         data.trans_mode or 'auto',

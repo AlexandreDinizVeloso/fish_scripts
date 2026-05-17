@@ -50,7 +50,8 @@ exports {
     'ApplyHandlingToVehicle',
     'GetBaseHandling',
     'GetRankFromScore',
-    'ApplySubArchetypeBonuses'
+    'ApplySubArchetypeBonuses',
+    'GetActivePerformanceData'
 }
 
 server_exports {

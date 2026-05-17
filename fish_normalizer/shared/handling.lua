@@ -22,7 +22,7 @@ HandlingEngine = {}
 --   Exotico: top speed focused
 local BASE_HANDLING = {
     -- Drive
-    fInitialDriveMaxFlatVel        = 150.0,  -- Base for archetype multipliers to reach 162 (Pentro) through 182 (NeroPS)
+    fInitialDriveMaxFlatVel        = 115.0,  -- Calibrated base flatvel to target exact class speeds (B: ~190, A L3: ~200, A L5 avg: ~208, A L5 top: ~215)
     fInitialDriveForce             = 0.30,
     fDriveInertia                  = 1.00,
     fDriveBiasFront                = 0.35,
@@ -40,16 +40,6 @@ local BASE_HANDLING = {
     fCamberStiffnesss              = 0.0,
     -- Steering
     fSteeringLock                  = 40.0,
-    -- Suspension
-    fSuspensionForce               = 2.5,
-    fSuspensionCompDamp            = 1.5,
-    fSuspensionReboundDamp         = 1.6,
-    fSuspensionDampingReboundSlow  = 0.25,
-    fSuspensionBiasFront           = 0.50,
-    fAntiRollBarForce              = 0.5,
-    fAntiRollBarBiasFront          = 0.50,
-    fRollCentreHeightFront         = 0.20,
-    fRollCentreHeightRear          = 0.20,
     -- Brakes
     fBrakeForce                    = 0.50,
     fBrakeBiasFront                = 0.65,
@@ -559,11 +549,11 @@ end
 
 local function ApplyInstability(profile, instabilityScore)
     if not instabilityScore or instabilityScore <= 0 then return profile end
-    local tractionPenalty    = 1.0 - (instabilityScore * 0.004)
-    local suspensionPenalty  = 1.0 - (instabilityScore * 0.003)
+    local tractionPenalty    = 1.0 - (instabilityScore * 0.0005) -- Maps 80 instability to a subtle, realistic 4% grip penalty
+    local suspensionPenalty  = 1.0 - (instabilityScore * 0.0004) -- Maps 80 instability to a subtle 3.2% damping penalty
     profile.fTractionCurveMax = (profile.fTractionCurveMax or 1.0) * tractionPenalty
     profile.fTractionCurveMin = (profile.fTractionCurveMin or 1.0) * tractionPenalty
-    profile.fTractionLossMult = (profile.fTractionLossMult or 1.0) * (1.0 + instabilityScore * 0.006)
+    profile.fTractionLossMult = (profile.fTractionLossMult or 1.0) * (1.0 + instabilityScore * 0.0008)
     profile.fSuspensionDampingReboundSlow = (profile.fSuspensionDampingReboundSlow or 1.0) * suspensionPenalty
     return profile
 end
@@ -657,10 +647,10 @@ function HandlingEngine.BuildHandlingProfile(params)
         end
     end
 
-    -- Step 3: Scale by PI score performance multiplier
+    -- Step 3: Scale by PI score performance multiplier (acceleration & braking only, top speed capped by archetype and parts)
     local perfMult = ScoreToPerformanceMultiplier(score)
     profile.fInitialDriveForce     = (profile.fInitialDriveForce or 1.0)    * perfMult
-    profile.fInitialDriveMaxFlatVel = (profile.fInitialDriveMaxFlatVel or 1.0) * perfMult
+    profile.fInitialDriveMaxFlatVel = (profile.fInitialDriveMaxFlatVel or 1.0)
     profile.fBrakeForce            = (profile.fBrakeForce or 1.0)           * perfMult
 
     -- Step 4: Apply instability from illegal parts
@@ -669,15 +659,12 @@ function HandlingEngine.BuildHandlingProfile(params)
     -- Step 5: Apply degradation from health
     local engineMult     = GetHealthMultiplier(health.engine or 100)
     local tiresMult      = GetHealthMultiplier(health.tires or 100)
-    local suspMult       = GetHealthMultiplier(health.suspension or 100)
     local brakesMult     = GetHealthMultiplier(health.brakes or 100)
 
     profile.fInitialDriveForce      = (profile.fInitialDriveForce or 1.0)    * engineMult
     profile.fInitialDriveMaxFlatVel = (profile.fInitialDriveMaxFlatVel or 1.0) * engineMult
     profile.fTractionCurveMax       = (profile.fTractionCurveMax or 1.0)     * tiresMult
     profile.fTractionCurveMin       = (profile.fTractionCurveMin or 1.0)     * tiresMult
-    profile.fSuspensionForce        = (profile.fSuspensionForce or 1.0)      * suspMult
-    profile.fSuspensionDampingReboundSlow = (profile.fSuspensionDampingReboundSlow or 1.0) * suspMult
     profile.fBrakeForce             = (profile.fBrakeForce or 1.0)           * brakesMult
 
     -- Step 6: Multiply ALL base handling keys by their multipliers
@@ -690,7 +677,7 @@ function HandlingEngine.BuildHandlingProfile(params)
     -- Direct-value fields (bias/proportions/percentages — NOT multiplied by base)
     local directValueFields = {
         'fBrakeBiasFront', 'fBrakeBiasRear', 'fDriveBiasFront',
-        'fSuspensionBiasFront', 'fTractionBiasFront',
+        'fTractionBiasFront',
         'fPercentSubmerged',
     }
     for _, key in ipairs(directValueFields) do
@@ -705,6 +692,29 @@ function HandlingEngine.BuildHandlingProfile(params)
 end
 
 -- ============================================================
+-- Safe Runtime Modifiable Handling Fields Whitelist
+-- Prevents read-only or unsupported fields from being modified,
+-- which causes GTA V to gltich their values to 0.0 (e.g. fMass, fSteeringLock).
+-- ============================================================
+
+local WRITABLE_HANDLING_FIELDS = {
+    fInitialDriveMaxFlatVel       = true,
+    fInitialDriveForce            = true,
+    fDriveInertia                 = true,
+    fBrakeForce                   = true,
+    fTractionCurveMax             = true,
+    fTractionCurveMin             = true,
+    fTractionCurveLateral         = true,
+    fTractionLossMult             = true,
+    fLowSpeedTractionLossMult     = true,
+    fTractionSpringDeltaMax       = true,
+    fCamberStiffnesss             = true,
+    fHandBrakeForce               = true,
+    fInitialDragCoeff             = true,
+    fDownForceModifier            = true,
+}
+
+-- ============================================================
 -- Apply Handling to Vehicle Entity (CLIENT ONLY)
 -- ============================================================
 
@@ -713,10 +723,12 @@ function HandlingEngine.ApplyHandlingToVehicle(vehicle, handlingProfile)
     if not handlingProfile then return false end
 
     for key, value in pairs(handlingProfile) do
-        if string.sub(key, 1, 1) == 'f' then
-            SetVehicleHandlingFloat(vehicle, 'CHandlingData', key, value)
-        elseif string.sub(key, 1, 1) == 'n' then
-            SetVehicleHandlingInt(vehicle, 'CHandlingData', key, math.floor(value))
+        if WRITABLE_HANDLING_FIELDS[key] then
+            if string.sub(key, 1, 1) == 'f' then
+                SetVehicleHandlingFloat(vehicle, 'CHandlingData', key, value)
+            elseif string.sub(key, 1, 1) == 'n' then
+                SetVehicleHandlingInt(vehicle, 'CHandlingData', key, math.floor(value))
+            end
         end
     end
 

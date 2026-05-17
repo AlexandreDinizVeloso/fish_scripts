@@ -23,6 +23,31 @@ local sessionStartTime = 0
 -- ============================================================
 
 local function NewVersionSnapshot(label, score, archetype, remapStage)
+    local ped = PlayerPedId()
+    local veh = GetVehiclePedIsIn(ped, false)
+    local activePerf = nil
+    local handlingXML = {}
+    
+    if veh ~= 0 and DoesEntityExist(veh) then
+        local plate = string.gsub(GetVehicleNumberPlateText(veh), '%s+', '')
+        pcall(function()
+            activePerf = exports['fish_normalizer']:GetActivePerformanceData(plate)
+        end)
+        
+        handlingXML = {
+            fInitialDriveMaxFlatVel = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fInitialDriveMaxFlatVel'),
+            fInitialDriveForce = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fInitialDriveForce'),
+            fBrakeForce = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fBrakeForce'),
+            fTractionCurveMax = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fTractionCurveMax'),
+            fTractionCurveMin = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fTractionCurveMin'),
+            fInitialDragCoeff = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fInitialDragCoeff'),
+            fSuspensionForce = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fSuspensionForce'),
+            fSuspensionCompDamp = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fSuspensionCompDamp'),
+            fSuspensionReboundDamp = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fSuspensionReboundDamp'),
+            fSuspensionRaise = GetVehicleHandlingFloat(veh, 'CHandlingData', 'fSuspensionRaise'),
+        }
+    end
+
     return {
         label     = label,
         score     = score,
@@ -30,6 +55,8 @@ local function NewVersionSnapshot(label, score, archetype, remapStage)
         remapStage = remapStage,
         startTime = GetGameTimer(),
         samples   = {},        -- raw speed samples (ms → km/h)
+        activePerf = activePerf,
+        handlingXML = handlingXML,
 
         -- Computed results
         maxSpeed      = 0,
@@ -59,10 +86,20 @@ local function GetCurrentVehicleSignature()
     local ped = PlayerPedId()
     if not IsPedInAnyVehicle(ped, false) then return nil end
     local veh  = GetVehiclePedIsIn(ped, false)
-    local score     = Entity(veh).state['fish:score'] or 0
-    local archetype = Entity(veh).state['fish:archetype'] or 'stock'
-    local heat      = Entity(veh).state['fish:heat'] or 0
     local plate     = GetVehicleNumberPlateText(veh):gsub('%s+', '')
+    
+    local score = 0
+    pcall(function()
+        score = exports['fish_normalizer']:GetVehicleScore(veh) or 0
+    end)
+    
+    local archetype = 'stock'
+    pcall(function()
+        archetype = exports['fish_normalizer']:GetVehicleArchetype(veh) or 'stock'
+    end)
+    
+    local heat = Entity(veh).state['fish:heat'] or 0
+    
     return {
         plate     = plate,
         score     = score,
@@ -216,66 +253,103 @@ local function StartSampling(vehicle)
                 currentVersion.lastGForce = gForce
             end
 
+            -- Inputs for precise measurement starting
+            local isThrottling = IsControlPressed(0, 32) or IsControlPressed(0, 87) or IsControlPressed(2, 71) -- W, Gamepad throttle
+            local isBraking = IsControlPressed(0, 72) or IsControlPressed(0, 76) or IsControlPressed(2, 72) or IsControlPressed(0, 88) -- S, Handbrake, Gamepad brake
+
             -- ── 0→100 state machine ──────────────────────────
             local sm01 = currentVersion.sm_0_100
-            if sm01.phase == 'waiting' and speedKMH < 5 then
-                sm01.phase     = 'ready'
-            elseif sm01.phase == 'ready' and speedKMH >= 5 then
+            if sm01.phase == 'waiting' and speedKMH < 2.0 then
+                sm01.phase = 'ready'
+            elseif sm01.phase == 'ready' and speedKMH >= 2.0 and isThrottling then
                 sm01.phase     = 'measuring'
                 sm01.startTime = now
                 sm01.startSpd  = speedKMH
-            elseif sm01.phase == 'measuring' and speedKMH >= 100 then
-                sm01.phase = 'done'
-                local elapsed = (now - sm01.startTime) / 1000.0
-                -- Interpolate back to exact 100 if we overshot
-                if sm01.startSpd then
-                    local overshoot = (speedKMH - 100) / (speedKMH - sm01.startSpd)
-                    elapsed = elapsed - (overshoot * SAMPLE_INTERVAL / 1000.0)
+            elseif sm01.phase == 'measuring' then
+                if speedKMH >= 100 then
+                    sm01.phase = 'done'
+                    local elapsed = (now - sm01.startTime) / 1000.0
+                    -- Interpolate back to exact 100 if we overshot
+                    if sm01.startSpd then
+                        local overshoot = (speedKMH - 100) / (speedKMH - sm01.startSpd)
+                        elapsed = elapsed - (overshoot * SAMPLE_INTERVAL / 1000.0)
+                    end
+                    currentVersion.time0_100 = math.max(0.1, elapsed)
+                elseif not isThrottling and speedKMH < 5.0 then
+                    -- Reset if they aborted the run
+                    sm01.phase = 'waiting'
                 end
-                currentVersion.time0_100 = math.max(0.1, elapsed)
             end
 
             -- ── 0→200 state machine ──────────────────────────
             local sm02 = currentVersion.sm_0_200
-            if sm02.phase == 'waiting' and speedKMH < 5 then
+            if sm02.phase == 'waiting' and speedKMH < 2.0 then
                 sm02.phase = 'ready'
-            elseif sm02.phase == 'ready' and speedKMH >= 5 then
+            elseif sm02.phase == 'ready' and speedKMH >= 2.0 and isThrottling then
                 sm02.phase     = 'measuring'
                 sm02.startTime = now
-            elseif sm02.phase == 'measuring' and speedKMH >= 200 then
-                sm02.phase = 'done'
-                currentVersion.time0_200 = (now - sm02.startTime) / 1000.0
+            elseif sm02.phase == 'measuring' then
+                if speedKMH >= 200 then
+                    sm02.phase = 'done'
+                    currentVersion.time0_200 = (now - sm02.startTime) / 1000.0
+                elseif not isThrottling and speedKMH < 5.0 then
+                    sm02.phase = 'waiting'
+                end
             end
 
             -- ── 100→0 state machine ──────────────────────────
             local sm10 = currentVersion.sm_100_0
             if sm10.phase == 'waiting' and speedKMH >= 100 then
-                sm10.phase     = 'ready'
-                sm10.startTime = now
-                sm10.startPos  = vector3(pos.x, pos.y, pos.z)
-            elseif sm10.phase == 'ready' and speedKMH < 5 then
-                sm10.phase = 'done'
-                local endTime = now
-                local dist    = #(vector3(pos.x, pos.y, pos.z) - sm10.startPos)
-                currentVersion.time100_0 = (endTime - sm10.startTime) / 1000.0
-                currentVersion.dist100_0 = dist
-                -- Reset so it can be triggered again
-                sm10.phase = 'waiting'
+                sm10.phase = 'ready'
+            elseif sm10.phase == 'ready' then
+                if isBraking then
+                    sm10.phase     = 'measuring'
+                    sm10.startTime = now
+                    sm10.startPos  = vector3(pos.x, pos.y, pos.z)
+                    sm10.startSpd  = speedKMH
+                elseif speedKMH < 90 then
+                    -- Reset if speed drops below target without braking
+                    sm10.phase = 'waiting'
+                end
+            elseif sm10.phase == 'measuring' then
+                if speedKMH < 2.0 then
+                    sm10.phase = 'done'
+                    local endTime = now
+                    local dist    = #(vector3(pos.x, pos.y, pos.z) - sm10.startPos)
+                    currentVersion.time100_0 = (endTime - sm10.startTime) / 1000.0
+                    currentVersion.dist100_0 = dist
+                    -- Reset so it can be triggered again
+                    sm10.phase = 'waiting'
+                elseif not isBraking and speedKMH > sm10.startSpd then
+                    -- Aborted braking run by accelerating again
+                    sm10.phase = 'waiting'
+                end
             end
 
             -- ── 200→0 state machine ──────────────────────────
             local sm20 = currentVersion.sm_200_0
             if sm20.phase == 'waiting' and speedKMH >= 200 then
-                sm20.phase     = 'ready'
-                sm20.startTime = now
-                sm20.startPos  = vector3(pos.x, pos.y, pos.z)
-            elseif sm20.phase == 'ready' and speedKMH < 5 then
-                sm20.phase = 'done'
-                local endTime = now
-                local dist    = #(vector3(pos.x, pos.y, pos.z) - sm20.startPos)
-                currentVersion.time200_0 = (endTime - sm20.startTime) / 1000.0
-                currentVersion.dist200_0 = dist
-                sm20.phase = 'waiting'
+                sm20.phase = 'ready'
+            elseif sm20.phase == 'ready' then
+                if isBraking then
+                    sm20.phase     = 'measuring'
+                    sm20.startTime = now
+                    sm20.startPos  = vector3(pos.x, pos.y, pos.z)
+                    sm20.startSpd  = speedKMH
+                elseif speedKMH < 180 then
+                    sm20.phase = 'waiting'
+                end
+            elseif sm20.phase == 'measuring' then
+                if speedKMH < 2.0 then
+                    sm20.phase = 'done'
+                    local endTime = now
+                    local dist    = #(vector3(pos.x, pos.y, pos.z) - sm20.startPos)
+                    currentVersion.time200_0 = (endTime - sm20.startTime) / 1000.0
+                    currentVersion.dist200_0 = dist
+                    sm20.phase = 'waiting'
+                elseif not isBraking and speedKMH > sm20.startSpd then
+                    sm20.phase = 'waiting'
+                end
             end
 
             -- Push live data to NUI every 100ms
@@ -320,6 +394,54 @@ local function FormatResultsForClipboard()
     for i, ver in ipairs(versions) do
         table.insert(lines, '')
         table.insert(lines, ('── %s (PI: %d | %s)'):format(ver.label, ver.score or 0, ver.archetype or '?'))
+        
+        -- Include active performance setup in telemetry clipboard!
+        if ver.activePerf then
+            local remapInfo = "None"
+            if ver.activePerf.remap and ver.activePerf.remap.final_stats then
+                local stats = ver.activePerf.remap.final_stats
+                remapInfo = string.format("TS %d / AC %d / HD %d / BR %d", stats.top_speed or 50, stats.acceleration or 50, stats.handling or 50, stats.braking or 50)
+            end
+            table.insert(lines, '  Remap Setup : ' .. remapInfo)
+            
+            local tuneInfo = "Stock"
+            if ver.activePerf.tune and ver.activePerf.tune.parts then
+                local parts = ver.activePerf.tune.parts
+                local partsList = {}
+                local categories = {
+                    { key = 'engine', label = 'Eng' },
+                    { key = 'transmission', label = 'Trn' },
+                    { key = 'turbo', label = 'Trb' },
+                    { key = 'suspension', label = 'Sus' },
+                    { key = 'brakes', label = 'Brk' },
+                    { key = 'tires', label = 'Trs' },
+                    { key = 'weight', label = 'Wgt' },
+                    { key = 'ecu', label = 'ECU' }
+                }
+                for _, cat in ipairs(categories) do
+                    local lvl = (parts[cat.key] or 'stock'):upper()
+                    table.insert(partsList, cat.label .. ': ' .. lvl)
+                end
+                tuneInfo = table.concat(partsList, ' | ')
+            end
+            table.insert(lines, '  Tuning Parts: ' .. tuneInfo)
+            
+            if ver.activePerf.tune and ver.activePerf.tune.drivetrain then
+                table.insert(lines, '  Drivetrain  : ' .. tostring(ver.activePerf.tune.drivetrain))
+            end
+        end
+
+        -- Include actual XML-level live handling memory values!
+        if ver.handlingXML and ver.handlingXML.fInitialDriveMaxFlatVel then
+            local h = ver.handlingXML
+            table.insert(lines, string.format('  XML FlatVel : %.2f mph  /  Force: %.4f  /  Drag: %.2f', 
+                h.fInitialDriveMaxFlatVel, h.fInitialDriveForce, h.fInitialDragCoeff))
+            table.insert(lines, string.format('  XML Traction: Max: %.3f  /  Min: %.3f  /  BrakeForce: %.2f', 
+                h.fTractionCurveMax, h.fTractionCurveMin, h.fBrakeForce))
+            table.insert(lines, string.format('  XML Suspen. : Force: %.3f  /  Damp: %.3f  /  Raise: %.3f', 
+                h.fSuspensionForce, h.fSuspensionCompDamp, h.fSuspensionRaise))
+        end
+
         table.insert(lines, '  Max Speed   : ' .. fmt(ver.maxSpeed,     'km/h', 1))
         table.insert(lines, '  0-100 km/h  : ' .. fmt(ver.time0_100,    's'))
         table.insert(lines, '  0-200 km/h  : ' .. fmt(ver.time0_200,    's'))

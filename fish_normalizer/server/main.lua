@@ -50,30 +50,20 @@ local function CalculateTunePI(parts)
     local tunePI = 0
     if not parts then return 0 end
 
-    -- Hardcoded fallback for part bonuses (matching fish_tunes/config.lua)
-    local PartBonuses = {
-        engine       = { stock={}, l1={acceleration=3,top_speed=2}, l2={acceleration=6,top_speed=4}, l3={acceleration=10,top_speed=7}, l4={acceleration=16,top_speed=11,instability=5}, l5={acceleration=24,top_speed=16,instability=12} },
-        transmission = { stock={}, l1={acceleration=2,handling=1}, l2={acceleration=4,handling=3}, l3={acceleration=7,handling=5}, l4={acceleration=11,handling=7,instability=3}, l5={acceleration=16,handling=10,instability=8} },
-        turbo        = { stock={}, l1={acceleration=4,top_speed=1}, l2={acceleration=8,top_speed=3}, l3={acceleration=13,top_speed=5}, l4={acceleration=20,top_speed=8,instability=8}, l5={acceleration=30,top_speed=12,instability=18} },
-        suspension   = { stock={}, l1={handling=2,braking=1}, l2={handling=5,braking=3}, l3={handling=8,braking=5}, l4={handling=12,braking=7,instability=3}, l5={handling=18,braking=10,instability=6} },
-        brakes       = { stock={}, l1={braking=3,handling=1}, l2={braking=6,handling=2}, l3={braking=10,handling=4}, l4={braking=15,handling=5,instability=2}, l5={braking=22,handling=7,instability=5} },
-        tires        = { stock={}, l1={handling=2,braking=2}, l2={handling=5,braking=4}, l3={handling=8,braking=7}, l4={handling=13,braking=10,instability=4}, l5={handling=18,braking=14,instability=8} },
-        weight       = { stock={}, l1={acceleration=1,handling=2}, l2={acceleration=3,handling=4}, l3={acceleration=5,handling=7}, l4={acceleration=8,handling=11,instability=4}, l5={acceleration=12,handling=16,instability=10} },
-        ecu          = { stock={}, l1={acceleration=2,top_speed=1,handling=1}, l2={acceleration=4,top_speed=2,handling=2}, l3={acceleration=7,top_speed=4,handling=3}, l4={acceleration=12,top_speed=7,handling=5,instability=6}, l5={acceleration=18,top_speed=10,handling=7,instability=14} },
-    }
-
     local partsTable = type(parts) == 'string' and json.decode(parts) or parts
 
+    local levelPI = {
+        stock = 0,
+        l1 = 10,
+        l2 = 18,
+        l3 = 26,
+        l4 = 34,
+        l5 = 40
+    }
+
     for cat, lv in pairs(partsTable) do
-        local bonus = PartBonuses[cat] and PartBonuses[cat][lv]
-        if bonus then
-            local ts = bonus.top_speed or 0
-            local ac = bonus.acceleration or 0
-            local hd = bonus.handling or 0
-            local br = bonus.braking or 0
-            -- FIX: Reduced multipliers from ~2-2.5x to ~0.5x so tune contribution
-            -- is meaningful (max ~130) without dominating the base PI score (~500-750)
-            tunePI = tunePI + (ts * 0.5) + (ac * 0.5) + (hd * 0.5) + (br * 0.5)
+        if levelPI[lv] then
+            tunePI = tunePI + levelPI[lv]
         end
     end
 
@@ -112,13 +102,21 @@ local function CalculateInstability(parts)
 end
 
 -- ============================================================
--- Calculate display PI = base normalization score + tune bonus
--- FIX: This properly combines the normalization score with tune
--- without corrupting the authoritative DB score.
+-- Calculate display PI = base normalization score + tune bonus + remap bonus
 -- ============================================================
 
-local function CalculateDisplayScore(dbScore, tunePI)
-    return math.max(0, math.min(1000, math.floor(dbScore + (tunePI or 0))))
+local function CalculateDisplayScore(dbScore, tunePI, remapPI)
+    local rawUpgrades = (tunePI or 0) + (remapPI or 0)
+    if rawUpgrades <= 0 then return math.floor(dbScore) end
+    
+    local headroom = 1000.0 - dbScore
+    if headroom <= 0 then return 1000 end
+    
+    -- Asymptotically damp upgrade gains as vehicle approaches 1000 PI
+    local dampFactor = math.exp(-rawUpgrades / 450.0)
+    local finalScore = 1000.0 - headroom * dampFactor
+    
+    return math.max(0, math.min(1000, math.floor(finalScore)))
 end
 
 -- ============================================================
@@ -137,7 +135,7 @@ end
 -- Push vehicle state to Entity State Bag (SERVER-AUTHORITATIVE)
 -- Calculates PI from the handling profile using shared function
 -- FIX: The authoritative score (dbScore) is NEVER overwritten.
--- Only a display score (normScore + tunePI) is pushed to state bag.
+-- Only a display score (normScore + tunePI + remapPI) is pushed to state bag.
 -- ============================================================
 
 function PushVehicleState(netId, data, remapData, tuneData)
@@ -153,6 +151,16 @@ function PushVehicleState(netId, data, remapData, tuneData)
     -- Calculate instability and tune PI contribution
     local instability = CalculateInstability(parts)
     local tunePI = CalculateTunePI(parts)
+
+    -- Calculate remap PI contribution from final_stats
+    local remapPI = 0
+    if remapData then
+        local stats = remapData.final_stats or remapData.finalStats
+        if stats then
+            local avg = ((stats.top_speed or 50) + (stats.acceleration or 50) + (stats.handling or 50) + (stats.braking or 50)) / 4
+            remapPI = math.floor((avg - 50) * 2)  -- maps 0-100 to -100 to +100 PI
+        end
+    end
 
     -- Build the handling profile
     local archetype = data.archetype or 'esportivo'
@@ -193,10 +201,10 @@ function PushVehicleState(netId, data, remapData, tuneData)
         return
     end
 
-    -- FIX: Calculate display score = base PI + tune contribution
+    -- FIX: Calculate display score = base PI + tune contribution + remap contribution
     -- Do NOT recalculate PI from handling profile (which uses a different 0-100 scale)
     -- Do NOT overwrite data.score in the cache
-    local displayScore = CalculateDisplayScore(dbScore, tunePI)
+    local displayScore = CalculateDisplayScore(dbScore, tunePI, remapPI)
     local displayRank = GetRankFromScore(displayScore)
 
     -- Push state bag
@@ -397,13 +405,38 @@ exports('DBGetRemap', function(plate)
     return FishDB.GetRemap(plate)
 end)
 exports('DBSaveRemap', function(plate, data, owner)
-    return FishDB.SaveRemap(plate, data, owner)
+    local success = FishDB.SaveRemap(plate, data, owner)
+    if success then
+        local rData = {
+            [plate] = {
+                plate = plate,
+                category = data.category,
+                sub_category = data.sub_category,
+                stats = data.stats,
+                finalStats = data.finalStats or data.final_stats or data.finalStats
+            }
+        }
+        TriggerClientEvent('fish_normalizer:receivePerformanceData', -1, rData, nil)
+    end
+    return success
 end)
 exports('DBGetTunes', function(plate)
     return FishDB.GetTunes(plate)
 end)
 exports('DBSaveTunes', function(plate, data, owner)
-    return FishDB.SaveTunes(plate, data, owner)
+    local success = FishDB.SaveTunes(plate, data, owner)
+    if success then
+        local tData = {
+            [plate] = {
+                plate = plate,
+                parts = data.parts or {},
+                drivetrain = data.drivetrain or 'FWD',
+                heat = data.heat or 0
+            }
+        }
+        TriggerClientEvent('fish_normalizer:receivePerformanceData', -1, nil, tData)
+    end
+    return success
 end)
 exports('DBGetListings', function(isIllegal)
     return FishDB.GetListings(isIllegal)
@@ -425,4 +458,47 @@ exports('DBSendMessage', function(channel, senderId, senderName, message)
 end)
 exports('DBCleanOldMessages', function()
     return FishDB.CleanOldMessages()
+end)
+
+-- ============================================================
+-- Client Database Synchronizer Event
+-- ============================================================
+
+RegisterNetEvent('fish_normalizer:requestPerformanceData')
+AddEventHandler('fish_normalizer:requestPerformanceData', function()
+    local src = source
+    
+    local allRemaps = MySQL.query.await('SELECT * FROM fish_vehicle_remaps', {})
+    local allTunes = MySQL.query.await('SELECT * FROM fish_vehicle_tunes', {})
+    
+    local rData = {}
+    if allRemaps then
+        for _, row in ipairs(allRemaps) do
+            if row.plate then
+                rData[row.plate] = {
+                    plate = row.plate,
+                    category = row.category,
+                    sub_category = row.sub_category,
+                    stats = row.stats and (type(row.stats) == 'string' and json.decode(row.stats) or row.stats) or {},
+                    finalStats = row.final_stats and (type(row.final_stats) == 'string' and json.decode(row.final_stats) or row.final_stats) or {}
+                }
+            end
+        end
+    end
+    
+    local tData = {}
+    if allTunes then
+        for _, row in ipairs(allTunes) do
+            if row.plate then
+                tData[row.plate] = {
+                    plate = row.plate,
+                    parts = row.parts and (type(row.parts) == 'string' and json.decode(row.parts) or row.parts) or {},
+                    drivetrain = row.drivetrain or 'FWD',
+                    heat = row.heat or 0
+                }
+            end
+        end
+    end
+    
+    TriggerClientEvent('fish_normalizer:receivePerformanceData', src, rData, tData)
 end)

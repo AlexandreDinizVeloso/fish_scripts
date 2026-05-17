@@ -22,6 +22,9 @@ AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, 
         if DoesEntityExist(veh) then
             -- Use the shared ApplyHandlingToVehicle export
             exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+            
+            -- Reapply performance modifications with the new base profile handling values
+            TriggerEvent('fish_normalizer:requestReapply', veh)
         end
     end)
 end)
@@ -162,13 +165,18 @@ function GetVehicleRank(vehicle)
         for _, r in ipairs(Config.Ranks) do
             if r.name == bagRank then rankObj = r; break end
         end
+
+        local stats = GetVehiclePerformanceStats(vehicle)
+        local baseScore = CalculateBaseScore(stats)
+        local _, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, bagArchetype or 'esportivo')
+
         return {
             rank = rankObj or Config.Ranks[1],
             score = bagScore,
             archetype = bagArchetype or 'esportivo',
             subArchetype = nil,
-            stats = {},
-            rawStats = {}
+            stats = modifiedStats or {},
+            rawStats = stats and stats.raw or {}
         }
     end
 
