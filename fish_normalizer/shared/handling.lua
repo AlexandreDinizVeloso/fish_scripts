@@ -15,16 +15,16 @@ HandlingEngine = {}
 -- Base reference values for a "neutral" stock vehicle
 local BASE_HANDLING = {
     -- Drive
-    fInitialDriveMaxFlatVel        = 155.0,  -- Aligned with XMLs (midpoint between 148 and 162)
-    fInitialDriveForce             = 0.35,   -- Stock force baseline
-    fDriveInertia                  = 1.10,
-    fDriveBiasFront                = 0.35,   -- RWD-leaning AWD for better corner exit
+    fInitialDriveMaxFlatVel        = 135.0,  -- Lowered slightly because performance.lua multiplies this by up to 1.44x
+    fInitialDriveForce             = 0.31,   
+    fDriveInertia                  = 1.05,
+    fDriveBiasFront                = 0.35,   
     nInitialDriveGears             = 6,      
-    fClutchChangeRateScaleUpShift  = 2.5,    -- Fast shifts based on XML (2.0 to 3.3)
-    fClutchChangeRateScaleDownShift = 2.5,
+    fClutchChangeRateScaleUpShift  = 2.2,    
+    fClutchChangeRateScaleDownShift = 2.2,
     -- Traction
-    fTractionCurveMax              = 2.10,   -- Based on XMLs (1.80 to 2.40)
-    fTractionCurveMin              = 1.85,
+    fTractionCurveMax              = 1.85,   -- Lowered so max tunes hit ~2.6 (preventing rollovers)
+    fTractionCurveMin              = 1.65,
     fTractionCurveLateral          = 22.0,   
     fTractionLossMult              = 1.0,
     fLowSpeedTractionLossMult      = 1.0,    
@@ -32,33 +32,28 @@ local BASE_HANDLING = {
     fTractionSpringDeltaMax        = 0.10,   
     fCamberStiffnesss              = 0.0,    
     -- Steering
-    fSteeringLock                  = 40.0,   -- XMLs use 40-42
+    fSteeringLock                  = 40.0,   
     -- Suspension
-    fSuspensionForce               = 2.6,    -- Firmer suspension based on XMLs (2.2 to 3.5)
+    fSuspensionForce               = 2.5,    
     fSuspensionCompDamp            = 1.5,    
     fSuspensionReboundDamp         = 1.6,    
     fSuspensionDampingReboundSlow  = 0.25,
-    fSuspensionUpperLimit          = 0.10,   
-    fSuspensionLowerLimit          = -0.12,  
-    fSuspensionRaise               = 0.0,    
+    -- CRITICAL FIX: Removed UpperLimit, LowerLimit, and Raise to prevent floor clipping
     fSuspensionBiasFront           = 0.50,   
-    fAntiRollBarForce              = 0.4,    
+    fAntiRollBarForce              = 0.5,    
     fAntiRollBarBiasFront          = 0.50,   
-    fRollCentreHeightFront         = 0.25,   -- Increased stability from XMLs
-    fRollCentreHeightRear          = 0.25,
+    fRollCentreHeightFront         = 0.20,   
+    fRollCentreHeightRear          = 0.20,
     -- Brakes
     fBrakeForce                    = 0.55,
-    fBrakeBiasFront                = 0.65,   -- Heavy front braking per XML
+    fBrakeBiasFront                = 0.65,   
     fHandBrakeForce                = 0.65,
     -- Body
     fMass                          = 1500.0,
-    fInitialDragCoeff              = 7.5,    -- Critical: Balanced drag (XMLs use 6.0 to 10.0)
+    fInitialDragCoeff              = 7.0,    
     fDownForceModifier             = 1.0,    
     fPercentSubmerged              = 85.0,   
-    fDeformationDamageMult         = 0.8,
-    fWeaponDamageMult              = 1.0,
-    fCollisionDamageMult           = 0.8,
-    fEngineDamageMult              = 1.0,
+    -- CRITICAL FIX: Removed Damage multipliers to prevent instant-explode bug
 }
 
 -- ============================================================
@@ -70,17 +65,17 @@ local BASE_HANDLING = {
 local ARCHETYPE_PROFILES = {
     esportivo = {
         -- High cornering, lightweight, limited top speed
-        fInitialDriveMaxFlatVel        = 1.02,
-        fInitialDriveForce             = 1.08,
-        fDriveInertia                  = 1.10,
+        fInitialDriveMaxFlatVel        = 1.05,
+        fInitialDriveForce             = 1.10,
+        fDriveInertia                  = 1.00,
         fTractionCurveMax              = 1.05,
-        fTractionCurveMin              = 1.02,
-        fTractionCurveLateral          = 1.05,  -- sharper lateral response
+        fTractionCurveMin              = 1.05,
+        fTractionCurveLateral          = 1.00,  -- sharper lateral response
         fTractionLossMult              = 0.90,
         fLowSpeedTractionLossMult      = 0.85,
         fTractionBiasFront             = 0.52,  -- slight front bias
         fSteeringLock                  = 0.85,
-        fSuspensionForce               = 1.20,
+        fSuspensionForce               = 1.10,
         fSuspensionCompDamp            = 1.15,
         fSuspensionReboundDamp         = 1.12,
         fSuspensionDampingReboundSlow  = 1.15,
@@ -92,12 +87,12 @@ local ARCHETYPE_PROFILES = {
         fHandBrakeForce                = 0.90,
         fBrakeForce                    = 1.10,
         fBrakeBiasFront                = 0.48,
-        fMass                          = 0.75,
+        fMass                          = 0.85,
         fInitialDragCoeff              = 0.90,  -- low drag
         fDownForceModifier             = 1.15,  -- more grip at speed
         fClutchChangeRateScaleUpShift  = 1.15,
         fClutchChangeRateScaleDownShift = 1.15,
-        fDeformationDamageMult         = 1.40,
+        fDeformationDamageMult         = 1.00,
     },
     possante = {
         -- Brutal acceleration, heavy, poor cornering
@@ -368,9 +363,9 @@ local SUBARCHETYPE_TWEAKS = {
 -- ============================================================
 
 local function ScoreToPerformanceMultiplier(score)
-    -- PI 0 -> 0.75x | PI 500 -> 1.0x | PI 750 (Class A) -> 1.125x | PI 1000 (Class S) -> 1.25x
+    -- PI 0 -> 0.85x | PI 500 -> 1.0x | PI 1000 -> 1.15x
     local normalized = math.max(0, score) / 1000.0
-    return 0.75 + (normalized * 0.50)
+    return 0.85 + (normalized * 0.30)
 end
 
 -- ============================================================

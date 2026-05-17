@@ -197,7 +197,7 @@ function ApplyPerformanceModifications(vehicle)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMax", finalTractionMax)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMin", finalTractionMin)
 
-    local dragReduction = 1.0 - math.min(0.25, (tuneBonus.top_speed / 160.0))
+    local dragReduction = 1.0 - math.min(0.30, (tuneBonus.top_speed / 150.0))
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", cache.fInitialDragCoeff * dragReduction)
     
     -- Apply drag reduction if top speed tune is active
@@ -211,7 +211,7 @@ function ApplyPerformanceModifications(vehicle)
     -- Higher transmission bonuses = faster shifts
     local shiftBonus = tuneBonus.acceleration or 0
     if shiftBonus > 0 then
-        local shiftMult = 1.0 + (shiftBonus / 100.0)  -- Much more aggressive shift speed
+        local shiftMult = 1.0 + (shiftBonus / 100.0) 
         SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleUpShift", cache.fClutchChangeRateScaleUpShift * shiftMult)
         SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleDownShift", cache.fClutchChangeRateScaleDownShift * shiftMult)
     else
@@ -229,7 +229,7 @@ function ApplyPerformanceModifications(vehicle)
         end
     end
 
-    local enginePowerBuff = 1.0 + (tuneBonus.acceleration / 100.0) 
+    local enginePowerBuff = 1.0 + (tuneBonus.acceleration / 250.0) 
     ModifyVehicleTopSpeed(vehicle, 1.0)
     SetVehicleEnginePowerMultiplier(vehicle, enginePowerBuff)
     
