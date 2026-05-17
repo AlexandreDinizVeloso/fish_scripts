@@ -53,7 +53,7 @@ end
 -- Called after any normalization/remap/tune update.
 -- ============================================================
 
-local function PushVehicleState(netId, data, remapData, tuneData)
+function PushVehicleState(netId, data, remapData, tuneData)
     if not netId or netId == 0 then return end
     local entityState = Entity(NetworkGetEntityFromNetworkId(netId)).state
     if not entityState then return end

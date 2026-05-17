@@ -55,10 +55,10 @@ function GetVehiclePerformanceStats(vehicle)
     local traction = GetVehicleModelMaxTraction(model)
 
     -- Normalize raw values to 0-100 scale
-    local normalizedTopSpeed = math.min(100, (topSpeed / 350) * 100)
-    local normalizedAccel = math.min(100, (accel / 3.0) * 100)
-    local normalizedBraking = math.min(100, (braking / 1.5) * 100)
-    local normalizedTraction = math.min(100, (traction / 3.0) * 100)
+    local normalizedTopSpeed = math.min(100, (topSpeed / 250.0) * 100)
+    local normalizedAccel = math.min(100, (accel / 0.55) * 100)
+    local normalizedBraking = math.min(100, (braking / 0.85) * 100)
+    local normalizedTraction = math.min(100, (traction / 2.80) * 100)
 
     return {
         model = model,
@@ -173,7 +173,7 @@ function GetVehicleRank(vehicle)
 
     -- If the vehicle has an overridden score (class swap), scale the base stats to match it
     if storedData and storedData.score and storedData.score > 0 and math.abs(storedData.score - naturalScore) > 2 then
-        local ratio = storedData.score / math.max(1, naturalScore)
+        local ratio = math.min(2.5, storedData.score / math.max(1, naturalScore))
         modifiedStats.top_speed = math.min(100, modifiedStats.top_speed * ratio)
         modifiedStats.acceleration = math.min(100, modifiedStats.acceleration * ratio)
         modifiedStats.handling = math.min(100, modifiedStats.handling * ratio)
@@ -203,10 +203,10 @@ function GetVehicleRank(vehicle)
         local tuneData = exports['fish_tunes']:GetVehicleTunes(vehicle)
         if tuneData and tuneData.bonuses then
             local tBonus = tuneData.bonuses
-            modifiedStats.top_speed = modifiedStats.top_speed * (1.0 + ((tBonus.top_speed or 0) * 0.5) / 100.0)
-            modifiedStats.acceleration = modifiedStats.acceleration * (1.0 + ((tBonus.acceleration or 0) * 0.5) / 100.0)
-            modifiedStats.handling = modifiedStats.handling * (1.0 + ((tBonus.handling or 0) * 0.5) / 100.0)
-            modifiedStats.braking = modifiedStats.braking * (1.0 + ((tBonus.braking or 0) * 0.5) / 100.0)
+            modifiedStats.top_speed = modifiedStats.top_speed * (1.0 + ((tBonus.top_speed or 0) * 0.25) / 100.0)
+            modifiedStats.acceleration = modifiedStats.acceleration * (1.0 + ((tBonus.acceleration or 0) * 0.25) / 100.0)
+            modifiedStats.handling = modifiedStats.handling * (1.0 + ((tBonus.handling or 0) * 0.25) / 100.0)
+            modifiedStats.braking = modifiedStats.braking * (1.0 + ((tBonus.braking or 0) * 0.25) / 100.0)
         end
     end
 
@@ -217,6 +217,15 @@ function GetVehicleRank(vehicle)
     finalScore = finalScore + (modifiedStats.handling * Config.Weights.handling)
     finalScore = finalScore + (modifiedStats.braking * Config.Weights.braking)
     finalScore = math.floor(finalScore * 10)
+
+    -- Add back archetype score bias which was lost during recalculation
+    if Config.Archetypes[archetype] and Config.Archetypes[archetype].scoreBias then
+        local bias = Config.Archetypes[archetype].scoreBias
+        finalScore = finalScore + (bias.top_speed or 0)
+        finalScore = finalScore + (bias.acceleration or 0)
+        finalScore = finalScore + (bias.handling or 0)
+        finalScore = finalScore + (bias.braking or 0)
+    end
 
     if subArchetype then
         finalScore = ApplySubArchetypeBonuses(finalScore, subArchetype)

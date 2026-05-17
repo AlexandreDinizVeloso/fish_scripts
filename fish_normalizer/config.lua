@@ -62,15 +62,15 @@ Config.Archetypes = {
             'Heavy chassis'
         },
         statModifiers = {
-            top_speed    = 0.95,
-            acceleration = 1.20,
-            handling     = 0.75,
-            braking      = 0.85,
-            traction     = 0.80
+            top_speed    = 1.00,
+            acceleration = 1.25,
+            handling     = 0.70,
+            braking      = 0.80,
+            traction     = 0.75
         },
         scoreBias = {
             top_speed    = 0,
-            acceleration = 20,
+            acceleration = 25,
             handling     = -15,
             braking      = -5
         }
@@ -91,15 +91,15 @@ Config.Archetypes = {
             'Expensive to maintain'
         },
         statModifiers = {
-            top_speed    = 1.20,
-            acceleration = 1.00,
-            handling     = 1.05,
-            braking      = 1.00,
+            top_speed    = 1.25,
+            acceleration = 0.95,
+            handling     = 1.00,
+            braking      = 0.95,
             traction     = 0.95
         },
         scoreBias = {
-            top_speed    = 20,
-            acceleration = 5,
+            top_speed    = 25,
+            acceleration = 0,
             handling     = 5,
             braking      = 0
         }
@@ -120,17 +120,17 @@ Config.Archetypes = {
             'No standout personality'
         },
         statModifiers = {
-            top_speed    = 1.10,
-            acceleration = 1.10,
-            handling     = 1.10,
-            braking      = 1.10,
-            traction     = 1.10
+            top_speed    = 1.15,
+            acceleration = 1.15,
+            handling     = 1.15,
+            braking      = 1.15,
+            traction     = 1.15
         },
         scoreBias = {
-            top_speed    = 10,
-            acceleration = 10,
-            handling     = 10,
-            braking      = 10
+            top_speed    = 15,
+            acceleration = 15,
+            handling     = 15,
+            braking      = 15
         }
     },
     moto = {
@@ -151,15 +151,15 @@ Config.Archetypes = {
         },
         statModifiers = {
             top_speed    = 0.90,
-            acceleration = 1.15,
-            handling     = 1.25,
+            acceleration = 1.25,
+            handling     = 1.30,
             braking      = 1.05,
-            traction     = 1.10
+            traction     = 1.15
         },
         scoreBias = {
             top_speed    = -5,
-            acceleration = 15,
-            handling     = 20,
+            acceleration = 20,
+            handling     = 25,
             braking      = 5
         }
     },
