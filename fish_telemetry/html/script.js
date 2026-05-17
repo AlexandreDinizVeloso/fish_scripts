@@ -207,10 +207,18 @@ function stopRecording() {
 // ── Copy Clipboard ──
 function copyClipboard() {
   fetch('https://fish_telemetry/copyClipboard', { method: 'POST', body: JSON.stringify({}) });
-  document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">check</span> Copied!';
-  setTimeout(() => {
-    document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">content_copy</span> Copy Results';
-  }, 2000);
+}
+
+function copyTextToClipboard(text) {
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.style.position = 'fixed';
+  el.style.opacity = '0';
+  document.body.appendChild(el);
+  el.select();
+  el.setSelectionRange(0, 99999);
+  document.execCommand('copy');
+  document.body.removeChild(el);
 }
 
 // ── Close ──
@@ -285,19 +293,18 @@ window.addEventListener('message', e => {
       }
       // Auto-copy to clipboard via JS Clipboard API
       if (msg.clipboard && msg.clipboardText) {
-        navigator.clipboard.writeText(msg.clipboardText).catch(() => {});
+        copyTextToClipboard(msg.clipboardText);
       }
       break;
 
     case 'copyToClipboard':
       // Lua sends text here for JS to copy
       if (msg.text) {
-        navigator.clipboard.writeText(msg.text).then(() => {
-          document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">check</span> Copied!';
-          setTimeout(() => {
-            document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">content_copy</span> Copy Results';
-          }, 2000);
-        }).catch(() => {});
+        copyTextToClipboard(msg.text);
+        document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">check</span> Copied!';
+        setTimeout(() => {
+          document.getElementById('btnCopy').innerHTML = '<span class="material-symbols-sharp">content_copy</span> Copy Results';
+        }, 2000);
       }
       break;
 

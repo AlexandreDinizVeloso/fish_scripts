@@ -78,23 +78,6 @@ local function AddHeat(plate, amount)
     return heatCache[plate].heat
 end
 
-function DecayAllHeat()
-    local now = os.time()
-    for plate, data in pairs(heatCache) do
-        if data.heat > 0 then
-            local elapsed = now - (data.lastDecay or now)
-            local decayAmount = math.floor((elapsed / 60) * HEAT_DECAY_RATE)
-            if decayAmount > 0 then
-                data.heat = math.max(0, data.heat - decayAmount)
-                data.lastDecay = now
-                MySQL.query('UPDATE fish_vehicle_tunes SET heat = ?, heat_last_decay = ? WHERE plate = ?', {
-                    data.heat, now, plate
-                })
-            end
-        end
-    end
-end
-
 -- ============================================================
 -- Helper: Recalculate total bonuses + instability from parts
 -- ============================================================
@@ -122,6 +105,32 @@ local function CalculatePartTotals(parts)
     end
 
     return bonuses, instability, totalHeat
+end
+
+function DecayAllHeat()
+    local now = os.time()
+    for plate, data in pairs(heatCache) do
+        if data.heat > 0 then
+            local existing = DBGetTunes(plate) or {}
+            local parts = existing.parts or {}
+            if type(parts) == 'string' then parts = json.decode(parts) or {} end
+            local _, _, fixedHeat = CalculatePartTotals(parts)
+
+            local elapsed = now - (data.lastDecay or now)
+            local decayAmount = math.floor((elapsed / 60) * HEAT_DECAY_RATE)
+            if decayAmount > 0 then
+                if data.heat > fixedHeat then
+                    data.heat = math.max(fixedHeat, data.heat - decayAmount)
+                    data.lastDecay = now
+                    MySQL.query('UPDATE fish_vehicle_tunes SET heat = ?, heat_last_decay = ? WHERE plate = ?', {
+                        data.heat, now, plate
+                    })
+                else
+                    data.lastDecay = now
+                end
+            end
+        end
+    end
 end
 
 -- ============================================================
@@ -823,3 +832,7 @@ exports('GetHeatLeaderboard', function()
 end)
 
 exports('AddHeat', AddHeat)
+
+exports('GetPartBonuses', function()
+    return Config.PartBonuses
+end)

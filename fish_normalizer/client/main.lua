@@ -165,7 +165,20 @@ function GetVehicleRank(vehicle)
 
     -- Calculate base first to map the archetype
     local baseScore = CalculateBaseScore(stats)
-    local _, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
+    local naturalScore, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
+    
+    if subArchetype then
+        naturalScore = ApplySubArchetypeBonuses(naturalScore, subArchetype)
+    end
+
+    -- If the vehicle has an overridden score (class swap), scale the base stats to match it
+    if storedData and storedData.score and storedData.score > 0 and math.abs(storedData.score - naturalScore) > 2 then
+        local ratio = storedData.score / math.max(1, naturalScore)
+        modifiedStats.top_speed = math.min(100, modifiedStats.top_speed * ratio)
+        modifiedStats.acceleration = math.min(100, modifiedStats.acceleration * ratio)
+        modifiedStats.handling = math.min(100, modifiedStats.handling * ratio)
+        modifiedStats.braking = math.min(100, modifiedStats.braking * ratio)
+    end
     
     -- INJECT REMAP MULTIPLIERS
     if GetResourceState('fish_remaps') == 'started' then
@@ -355,83 +368,64 @@ RegisterNUICallback('close', function(data, cb)
     cb('ok')
 end)
 
--- NUI Callback: Select archetype
-RegisterNUICallback('selectArchetype', function(data, cb)
+-- NUI Callback: Preview Stats
+RegisterNUICallback('previewStats', function(data, cb)
     if not currentVehicle then cb('error'); return end
 
-    local archetype = data.archetype
-    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-
-    if not vehicleData[plate] then
-        vehicleData[plate] = {}
-    end
-    vehicleData[plate].archetype = archetype
-
-    -- Recalculate stats
-    local stats = GetVehiclePerformanceStats(currentVehicle)
-    local baseScore = CalculateBaseScore(stats)
-    local finalScore, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
-
-    if vehicleData[plate].subArchetype then
-        finalScore = ApplySubArchetypeBonuses(finalScore, vehicleData[plate].subArchetype)
-    end
-
-    local rank = GetRankFromScore(finalScore)
-
-    -- Save to server with vehicle net ID for state bag push
-    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
-    TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate], netId)
-
-    cb(json.encode({
-        score = finalScore,
-        rank = rank,
-        stats = modifiedStats or stats.normalized,
-        archetype = archetype
-    }))
-end)
-
--- NUI Callback: Select sub-archetype
-RegisterNUICallback('selectSubArchetype', function(data, cb)
-    if not currentVehicle then cb('error'); return end
-
+    local archetype = data.archetype or 'esportivo'
     local subArchetype = data.subArchetype
-    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-
-    if not vehicleData[plate] then
-        vehicleData[plate] = {}
-    end
-    vehicleData[plate].subArchetype = subArchetype
+    local overrideScore = data.overrideScore
 
     local stats = GetVehiclePerformanceStats(currentVehicle)
     local baseScore = CalculateBaseScore(stats)
-    local archetype = vehicleData[plate].archetype or 'esportivo'
     local finalScore, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
-    finalScore = ApplySubArchetypeBonuses(finalScore, subArchetype)
+
+    if subArchetype then
+        finalScore = ApplySubArchetypeBonuses(finalScore, subArchetype)
+    end
+
+    -- If an override score is provided (e.g., from rank override), scale the stats to match
+    if overrideScore and overrideScore ~= finalScore then
+        local ratio = overrideScore / math.max(1, finalScore)
+        modifiedStats.top_speed = math.min(100, modifiedStats.top_speed * ratio)
+        modifiedStats.acceleration = math.min(100, modifiedStats.acceleration * ratio)
+        modifiedStats.handling = math.min(100, modifiedStats.handling * ratio)
+        modifiedStats.braking = math.min(100, modifiedStats.braking * ratio)
+        finalScore = overrideScore
+    end
 
     local rank = GetRankFromScore(finalScore)
 
-    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
-    TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate], netId)
-
-    cb(json.encode({
+    cb({
         score = finalScore,
         rank = rank,
-        stats = modifiedStats or stats.normalized,
-        subArchetype = subArchetype
-    }))
+        stats = modifiedStats,
+    })
 end)
 
 -- NUI Callback: Confirm normalization
-RegisterNUICallback('confirmNormalization', function(data, cb)
+RegisterNUICallback('saveData', function(data, cb)
     if not currentVehicle then cb('error'); return end
 
     local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    if vehicleData[plate] then
-        vehicleData[plate].normalized = true
-        vehicleData[plate].normalizedAt = GetCloudTimeAsInt()
-        TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate])
-        ShowNotification('~g~Vehicle normalized successfully!')
+    if not vehicleData[plate] then
+        vehicleData[plate] = {}
     end
+
+    vehicleData[plate].archetype = data.archetype
+    vehicleData[plate].subArchetype = data.subArchetype
+    vehicleData[plate].rank = data.rank
+    vehicleData[plate].score = data.score
+    vehicleData[plate].normalized = true
+    vehicleData[plate].normalizedAt = GetCloudTimeAsInt()
+
+    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate], netId)
+    ShowNotification('~g~Vehicle normalized successfully!')
+
+    isNuiOpen = false
+    SetNuiFocus(false, false)
+    currentVehicle = nil
 
     cb('ok')
 end)
@@ -526,30 +520,10 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================
--- Client Exports (must be explicit — fxmanifest exports{} is just validation)
--- ============================================================
-
-exports('GetVehicleRank', function(vehicle)
-    return GetVehicleRank(vehicle)
-end)
-
-exports('GetVehicleArchetype', function(vehicle)
-    return GetVehicleArchetype(vehicle)
-end)
-
-exports('GetVehicleScore', function(vehicle)
-    return GetVehicleScore(vehicle)
-end)
-
-exports('GetVehicleData', function(vehicle)
-    return GetVehicleData(vehicle)
-end)
-
-exports('GetArchetypeModifier', function(archetypeKey, statKey)
+function GetArchetypeModifier(archetypeKey, statKey)
     local archetype = Config.Archetypes[archetypeKey]
     if archetype and archetype.statModifiers then
         return archetype.statModifiers[statKey] or 1.0
     end
     return 1.0
-end)
+end

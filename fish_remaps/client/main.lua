@@ -1,4 +1,4 @@
-﻿-- fish_remaps: Client Main
+-- fish_remaps: Client Main
 local isNuiOpen = false
 local currentVehicle = nil
 local remapData = {}
@@ -116,7 +116,7 @@ function OpenRemap()
         vehicleName = displayName,
         plate = plate,
         vehicleNetId = vehicleNetId,
-        originalArchetype = (existing and (existing.original_archetype or existing.originalArchetype)) or currentArchetype,
+        originalArchetype = currentArchetype,
         currentArchetype = currentArchetype,
         subArchetype = currentSubArchetype,
         currentSubArchetype = currentSubArchetype,
@@ -154,6 +154,15 @@ RegisterNUICallback('close', function(data, cb)
     cb('ok')
 end)
 
+RegisterNUICallback('confirmRemap', function(data, cb)
+    if not data.plate then cb('error'); return end
+    TriggerServerEvent('fish_remaps:confirmRemap', data.plate, data.data, data.vehicleNetId)
+    isNuiOpen = false
+    SetNuiFocus(false, false)
+    currentVehicle = nil
+    cb('ok')
+end)
+
 RegisterNUICallback('previewAdjustment', function(data, cb)
     if not currentVehicle then cb('error'); return end
 
@@ -184,10 +193,43 @@ RegisterNUICallback('previewAdjustment', function(data, cb)
     -- Apply adjustments
     local final = ApplyStatAdjustments(blended, adjustments)
 
+    -- Calculate score preview
+    local rMult = {
+        top_speed = 0.8 + (final.top_speed or 50) / 100 * 0.4,
+        acceleration = 0.8 + (final.acceleration or 50) / 100 * 0.4,
+        handling = 0.8 + (final.handling or 50) / 100 * 0.4,
+        braking = 0.8 + (final.braking or 50) / 100 * 0.4
+    }
+
+    local tempStats = {
+        top_speed = (newBaseStats.top_speed or 50) * rMult.top_speed,
+        acceleration = (newBaseStats.acceleration or 50) * rMult.acceleration,
+        handling = (newBaseStats.handling or 50) * rMult.handling,
+        braking = (newBaseStats.braking or 50) * rMult.braking
+    }
+
+    local score = 0
+    score = score + (tempStats.top_speed * 0.30)
+    score = score + (tempStats.acceleration * 0.30)
+    score = score + (tempStats.handling * 0.25)
+    score = score + (tempStats.braking * 0.15)
+    score = math.floor(score * 10)
+
+    if data.subArchetype then
+        local success, result = pcall(function() return exports['fish_normalizer']:ApplySubArchetypeBonuses(score, data.subArchetype) end)
+        if success and result then score = result end
+    end
+
+    local rankData = nil
+    local success, result = pcall(function() return exports['fish_normalizer']:GetRankFromScore(score) end)
+    if success and result then rankData = result end
+
     cb({
         blended = blended,
         final = final,
-        original = originalStats
+        original = originalStats,
+        score = score,
+        rank = rankData
     })
 end)
 
@@ -229,52 +271,6 @@ RegisterNUICallback('changeArchetype', function(data, cb)
     })
 end)
 
-RegisterNUICallback('confirmRemap', function(data, cb)
-    if not currentVehicle then cb('error'); return end
-
-    local plate = GetVehicleNumberPlateText(currentVehicle):gsub('%s+', '')
-    local normalizerData = exports['fish_normalizer']:GetVehicleData(currentVehicle)
-
-    local originalArchetype = 'esportivo'
-    if normalizerData then
-        originalArchetype = normalizerData.archetype or 'esportivo'
-    end
-
-    local existing = remapData[plate]
-    local preservedOriginalArchetype = originalArchetype
-    if existing and existing.originalArchetype then
-        preservedOriginalArchetype = existing.originalArchetype
-    end
-
-    local remapInfo = {
-        originalArchetype = preservedOriginalArchetype,
-        currentArchetype = data.archetype or originalArchetype,
-        currentSubArchetype = data.subArchetype,
-        adjustments = data.adjustments or {},
-        blendedStats = data.blendedStats or {},
-        finalStats = data.finalStats or {},
-        remapTime = GetCloudTimeAsInt(),
-        owner = GetPlayerServerId(PlayerId())
-    }
-
-    remapData[plate] = remapInfo
-
-    -- Build server-compatible payload with snake_case fields for DB
-    local serverPayload = {
-        original_archetype   = preservedOriginalArchetype,
-        current_archetype    = data.archetype or originalArchetype,
-        sub_archetype        = data.subArchetype,
-        stat_adjustments     = data.adjustments or {},
-        blended_stats        = data.blendedStats or {},
-        final_stats          = data.finalStats or {},
-    }
-
-    local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
-    TriggerServerEvent('fish_remaps:confirmRemap', plate, serverPayload, netId)
-
-    TriggerEvent('fish_remaps:performanceUpdated', plate, remapInfo)
-    cb('ok')
-end)
 
 RegisterNUICallback('saveDyno', function(data, cb)
     if not currentVehicle then cb('error'); return end

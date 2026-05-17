@@ -9,7 +9,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { background: transparent !important; }
+  html, body {
+    width: 100vw;
+    height: 100vh;
+    background: transparent !important;
+    overflow: hidden;
+  }
   :root {
     --bg:       #070810;
     --bg2:      #0d0e1a;
@@ -30,11 +35,9 @@
   }
   body {
     font-family: var(--sans);
-    background: transparent;
     color: var(--text);
     margin: 0;
     padding: 0;
-    overflow: hidden;
     pointer-events: none;
     display: none;
   }
@@ -194,7 +197,6 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 0;
-    min-height: 200px;
     max-height: 60vh;
     overflow-y: auto;
   }

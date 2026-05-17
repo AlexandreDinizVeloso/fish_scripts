@@ -234,7 +234,7 @@ window.addEventListener('message', e => {
 
     document.getElementById('vehName').textContent  = msg.vehicleName || '—';
     document.getElementById('vehPlate').textContent = tuneState.plate;
-    document.getElementById('piChip').textContent   = `PI: ${(msg.classData && msg.classData.score) || '—'}`;
+    document.getElementById('piChip').textContent   = `PI: ${(msg.classData && typeof msg.classData.score !== 'undefined') ? msg.classData.score : '—'}`;
 
     updateHeat(tuneState.heat, tuneState.maxHeat);
     buildPartsGrid();

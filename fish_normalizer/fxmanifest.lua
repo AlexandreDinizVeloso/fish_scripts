@@ -30,7 +30,6 @@ server_scripts {
 
 client_scripts {
     'client/main.lua',
-    'client/nui.lua',
     'client/performance.lua'
 }
 
@@ -49,7 +48,9 @@ exports {
     'GetArchetypeModifier',
     'BuildHandlingProfile',
     'ApplyHandlingToVehicle',
-    'GetBaseHandling'
+    'GetBaseHandling',
+    'GetRankFromScore',
+    'ApplySubArchetypeBonuses'
 }
 
 server_exports {

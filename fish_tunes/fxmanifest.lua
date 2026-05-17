@@ -19,7 +19,6 @@ shared_scripts {
 -- Client-side tuning logic
 client_scripts {
     'client/main.lua',
-    'client/nui.lua',
     'client/dyno.lua',
     'client/drivetrain.lua',
     'client/tires.lua',

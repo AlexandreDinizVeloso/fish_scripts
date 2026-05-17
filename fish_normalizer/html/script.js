@@ -8,9 +8,38 @@ let nData = {
   subArchetype: null,
   rank: 'C',
   score: 0,
+  overrideScore: null,
   stats: {},
   config: null,
 };
+
+function requestPreview() {
+  fetch('https://fish_normalizer/previewStats', {
+    method: 'POST',
+    body: JSON.stringify({
+      archetype: nData.archetype,
+      subArchetype: nData.subArchetype,
+      overrideScore: nData.overrideScore || null
+    })
+  }).then(res => res.json()).then(data => {
+    nData.score = data.score;
+    if (data.rank && data.rank.name) {
+        nData.rank = data.rank.name;
+    } else if (data.rank) {
+        nData.rank = data.rank;
+    }
+    nData.stats = data.stats;
+    
+    // We only re-render visual components without triggering loops
+    document.getElementById('archetypeGrid').querySelectorAll('.arch-card').forEach(card => {
+        card.className = 'arch-card' + (nData.archetype === card.querySelector('.name').textContent.toLowerCase().replace('é','e').replace('ó','o').replace('á','a').replace('í','i') ? ' selected' : '');
+    });
+    
+    buildStatsPanel();
+    updateRankBadge();
+    document.getElementById('scorePreview').textContent = nData.score;
+  }).catch(err => console.error(err));
+}
 
 const ARCHETYPES = [
   { key:'esportivo', label:'Esportivo', icon:'🏎️', desc:'Grip & Corners' },
@@ -43,8 +72,9 @@ function buildArchetypeGrid() {
     card.innerHTML = `<div class="icon">${a.icon}</div><div class="name">${a.label}</div><div class="desc">${a.desc}</div>`;
     card.onclick = () => {
       nData.archetype = a.key;
+      nData.overrideScore = null;
       buildArchetypeGrid();
-      recalcScore();
+      requestPreview();
     };
     grid.appendChild(card);
   });
@@ -57,14 +87,14 @@ function buildSubGrid() {
   const none = document.createElement('div');
   none.className = 'sub-card' + (!nData.subArchetype ? ' selected' : '');
   none.textContent = 'None';
-  none.onclick = () => { nData.subArchetype = null; buildSubGrid(); };
+  none.onclick = () => { nData.subArchetype = null; buildSubGrid(); requestPreview(); };
   grid.appendChild(none);
 
   SUB_ARCHETYPES.forEach(s => {
     const card = document.createElement('div');
     card.className = 'sub-card' + (nData.subArchetype === s ? ' selected' : '');
     card.textContent = s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    card.onclick = () => { nData.subArchetype = s; buildSubGrid(); };
+    card.onclick = () => { nData.subArchetype = s; buildSubGrid(); requestPreview(); };
     grid.appendChild(card);
   });
 }
@@ -88,14 +118,12 @@ function buildRankSelector() {
     btn.style.borderColor = isSel ? r.color : '';
     btn.onclick = () => {
       nData.rank = r.name;
-      // Autobalance: if current score is outside the chosen class range, set to midpoint
       const range = CLASS_RANGES[r.name];
-      if (range && (nData.score < range.min || nData.score > range.max)) {
-        nData.score = range.mid;
-        document.getElementById('scorePreview').textContent = nData.score;
+      if (range) {
+        nData.overrideScore = range.mid;
       }
       buildRankSelector();
-      updateRankBadge();
+      requestPreview();
     };
     sel.appendChild(btn);
   });
@@ -190,6 +218,7 @@ window.addEventListener('message', e => {
     nData.subArchetype = msg.currentSubArchetype || null;
     nData.rank         = 'C';  // will be recalculated
     nData.score        = msg.baseScore || 0;
+    nData.overrideScore = null;
     nData.stats        = msg.stats || {};
 
     document.getElementById('vehName').textContent  = msg.vehicleName || '—';

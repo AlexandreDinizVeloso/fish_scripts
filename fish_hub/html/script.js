@@ -111,6 +111,7 @@ function renderMarket(container, isIllegal) {
 }
 
 function showPostListing(isIllegal) {
+  hubState.currentPanel = isIllegal ? 'post-listing-illegal' : 'post-listing-legal';
   const container = document.getElementById('mainContent');
   container.innerHTML = `
     <div style="max-width:480px;margin:0 auto">
@@ -188,10 +189,6 @@ function renderChat(container, channel) {
 
   container.innerHTML = `
     <div class="chat-wrap">
-      <div class="chat-channels">
-        <div class="channel-btn ${channel === 'global' ? 'active' : ''}" onclick="switchChannel('global')">📢 Global</div>
-        ${hubState.chips.v2 ? `<div class="channel-btn illegal ${channel === 'illegal' ? 'active' : ''}" onclick="switchChannel('illegal')">🔴 Underground</div>` : ''}
-      </div>
       <div class="chat-messages" id="chatMessages">
         ${msgs.length ? msgs.map(m => formatMessage(m)).join('') : '<div style="color:var(--muted);font-size:11px;text-align:center;padding:20px">No messages yet...</div>'}
       </div>
@@ -289,6 +286,7 @@ function renderHeat(container) {
 
 // ── Chip Installer ──
 function showChipInstaller() {
+  hubState.currentPanel = 'install-chip';
   const container = document.getElementById('mainContent');
   container.innerHTML = `
     <div style="max-width:400px;margin:0 auto;text-align:center">

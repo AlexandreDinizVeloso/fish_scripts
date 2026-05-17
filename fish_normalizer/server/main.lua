@@ -58,12 +58,9 @@ local function PushVehicleState(netId, data, remapData, tuneData)
     local entityState = Entity(NetworkGetEntityFromNetworkId(netId)).state
     if not entityState then return end
 
-    entityState:set('fish:score',     data.score or 0,             true)
-    entityState:set('fish:rank',      data.rank or 'C',            true)
-    entityState:set('fish:archetype', data.archetype or 'esportivo', true)
-
     -- Build and push handling profile
     local instability = 0
+    local tunePI = 0
     local parts = {}
     if tuneData and tuneData.parts then
         parts = type(tuneData.parts) == 'string' and json.decode(tuneData.parts) or tuneData.parts
@@ -95,10 +92,23 @@ local function PushVehicleState(netId, data, remapData, tuneData)
     end
     for cat, lv in pairs(parts) do
         local bonus = PartBonuses[cat] and PartBonuses[cat][lv]
-        if bonus and bonus.instability then
-            instability = instability + bonus.instability
+        if bonus then
+            if bonus.instability then
+                instability = instability + bonus.instability
+            end
+            local ts = bonus.top_speed or 0
+            local ac = bonus.acceleration or 0
+            local hd = bonus.handling or 0
+            local br = bonus.braking or 0
+            tunePI = tunePI + (ts * 3.0) + (ac * 3.0) + (hd * 2.5) + (br * 1.5)
         end
     end
+
+    local finalScore = (data.score or 0) + math.floor(tunePI)
+
+    entityState:set('fish:score',     finalScore,                  true)
+    entityState:set('fish:rank',      data.rank or 'C',            true)
+    entityState:set('fish:archetype', data.archetype or 'esportivo', true)
 
     if not HandlingEngine or not HandlingEngine.BuildHandlingProfile then
         print('[fish_normalizer] WARNING: HandlingEngine not ready yet, skipping state bag push.')
@@ -106,7 +116,7 @@ local function PushVehicleState(netId, data, remapData, tuneData)
     end
 
     local ok, handlingProfile = pcall(HandlingEngine.BuildHandlingProfile, {
-        score             = data.score or 0,
+        score             = finalScore,
         archetype         = data.archetype or 'esportivo',
         subArchetype      = data.sub_archetype,
         originalArchetype = (remapData and remapData.original_archetype) or data.original_archetype,
@@ -175,7 +185,7 @@ AddEventHandler('fish_normalizer:saveData', function(plate, data, vehicleNetId)
     -- Notify client
     TriggerClientEvent('fish_normalizer:notify', src, {
         type    = 'success',
-        message = ('Vehicle normalized: %s | %s (%d PI)'):format(plate, data.rank, data.score)
+        message = ('Vehicle normalized: %s | %s (%d PI)'):format(plate, data.rank or '?', data.score or 0)
     })
 end)
 
@@ -296,11 +306,6 @@ function GetAllNormalizedVehicles()
     return vehicleDataCache
 end
 
-exports('GetVehicleRankServer',       GetVehicleRankServer)
-exports('GetVehicleDataServer',       GetVehicleDataServer)
-exports('SaveVehicleData',            SaveVehicleData)
-exports('GetAllNormalizedVehicles',   GetAllNormalizedVehicles)
-exports('PushVehicleState',           PushVehicleState)
 
 -- ============================================================
 -- DB Exports (for fish_remaps, fish_tunes, fish_hub)

@@ -205,6 +205,8 @@ local ARCHETYPE_PROFILES = {
         fSuspensionBiasFront           = 0.55,
         fAntiRollBarForce              = 1.50,
         fAntiRollBarBiasFront          = 0.50,
+        fRollCentreHeightFront         = 0.80,  -- lower CoG to prevent flipping
+        fRollCentreHeightRear          = 0.80,
         fHandBrakeForce                = 1.10,
         fBrakeForce                    = 1.05,
         fBrakeBiasFront                = 0.45,
@@ -366,8 +368,8 @@ local SUBARCHETYPE_TWEAKS = {
 -- ============================================================
 
 local function ScoreToPerformanceMultiplier(score)
-    -- PI 0 → 0.60x, PI 500 → 0.85x, PI 750 → 1.0x, PI 999 → 1.25x
-    local normalized = math.max(0, math.min(1000, score)) / 1000.0
+    -- PI 0 → 0.60x, PI 500 → 0.85x, PI 750 → 1.0x, PI 1000 → 1.25x (scales infinitely)
+    local normalized = math.max(0, score) / 1000.0
     return 0.60 + (normalized * 0.65)
 end
 
@@ -522,8 +524,11 @@ function HandlingEngine.ApplyHandlingToVehicle(vehicle, handlingProfile)
 
     -- Apply each key using the appropriate native
     for key, value in pairs(handlingProfile) do
-        -- Float fields
-        SetVehicleHandlingFloat(vehicle, 'CHandlingData', key, value)
+        if string.sub(key, 1, 1) == 'f' then
+            SetVehicleHandlingFloat(vehicle, 'CHandlingData', key, value)
+        elseif string.sub(key, 1, 1) == 'n' then
+            SetVehicleHandlingInt(vehicle, 'CHandlingData', key, math.floor(value))
+        end
     end
 
     return true
@@ -538,7 +543,11 @@ function HandlingEngine.GetBaseHandling(vehicle)
     if not DoesEntityExist(vehicle) then return nil end
     local result = {}
     for key, _ in pairs(BASE_HANDLING) do
-        result[key] = GetVehicleHandlingFloat(vehicle, 'CHandlingData', key)
+        if string.sub(key, 1, 1) == 'f' then
+            result[key] = GetVehicleHandlingFloat(vehicle, 'CHandlingData', key)
+        elseif string.sub(key, 1, 1) == 'n' then
+            result[key] = GetVehicleHandlingInt(vehicle, 'CHandlingData', key)
+        end
     end
     return result
 end
@@ -547,17 +556,17 @@ end
 -- Exports
 -- ============================================================
 
-exports('BuildHandlingProfile', function(params)
+function BuildHandlingProfile(params)
     return HandlingEngine.BuildHandlingProfile(params)
-end)
+end
 
 -- Client-only export (will fail gracefully server-side)
 if IsDuplicityVersion and not IsDuplicityVersion() then
-    exports('ApplyHandlingToVehicle', function(vehicle, profile)
+    function ApplyHandlingToVehicle(vehicle, profile)
         return HandlingEngine.ApplyHandlingToVehicle(vehicle, profile)
-    end)
-    exports('GetBaseHandling', function(vehicle)
+    end
+    function GetBaseHandling(vehicle)
         return HandlingEngine.GetBaseHandling(vehicle)
-    end)
+    end
 end
 

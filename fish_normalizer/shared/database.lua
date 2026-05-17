@@ -87,7 +87,7 @@ function DB.CreateTables()
             `type`                  ENUM('part','service','request') DEFAULT 'part',
             `category`              VARCHAR(50) DEFAULT NULL,
             `level`                 VARCHAR(10) DEFAULT NULL,
-            `price`                 INT DEFAULT 0,
+            `price`                 BIGINT DEFAULT 0,
             `description`           TEXT DEFAULT NULL,
             `is_illegal`            TINYINT(1) DEFAULT 0,
             `expires_at`            TIMESTAMP NULL DEFAULT NULL,
@@ -96,6 +96,11 @@ function DB.CreateTables()
             INDEX `idx_expires` (`expires_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ]])
+
+    -- Ensure price column is BIGINT for existing tables
+    pcall(function()
+        MySQL.query.await('ALTER TABLE `fish_hub_listings` MODIFY COLUMN `price` BIGINT DEFAULT 0;')
+    end)
 
     -- Hub chat messages (global + private DMs)
     MySQL.query.await([[

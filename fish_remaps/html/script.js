@@ -14,6 +14,25 @@ let remapState = {
   existingData: null,
 };
 
+let currentPreviewData = null;
+
+function requestPreview() {
+  fetch('https://fish_remaps/previewAdjustment', {
+    method: 'POST',
+    body: JSON.stringify({
+      archetype: remapState.targetArchetype,
+      subArchetype: remapState.subArchetype,
+      adjustments: remapState.statAdjustments
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    currentPreviewData = data;
+    buildDNAViz();
+  })
+  .catch(err => console.error('Preview error:', err));
+}
+
 const ARCHETYPES = [
   { key: 'esportivo', label: 'Esportivo', icon: '🏎️' },
   { key: 'possante', label: 'Possante', icon: '💪' },
@@ -52,6 +71,7 @@ function buildArchGrid() {
       updateDNABar();
       updateSummary();
       calcCost();
+      requestPreview();
     };
     grid.appendChild(card);
   });
@@ -66,7 +86,13 @@ function buildSubPills() {
     const pill = document.createElement('div');
     pill.className = 'sub-pill' + (remapState.subArchetype === key ? ' selected' : '');
     pill.textContent = s === 'None' ? 'None' : s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    pill.onclick = () => { remapState.subArchetype = key; buildSubPills(); updateSummary(); calcCost(); };
+    pill.onclick = () => { 
+      remapState.subArchetype = key; 
+      buildSubPills(); 
+      updateSummary(); 
+      calcCost(); 
+      requestPreview();
+    };
     container.appendChild(pill);
   });
 }
@@ -98,6 +124,7 @@ function updateSlider(key, rawVal, labelEl) {
   labelEl.className = 'slider-val ' + (val > 0 ? 'pos' : val < 0 ? 'neg' : 'zero');
   updateSummary();
   calcCost();
+  requestPreview();
 }
 
 // ── DNA Bar ──
@@ -121,12 +148,20 @@ const ARCH_STAT_PROFILES = {
 
 function buildDNAViz() {
   const container = document.getElementById('dnaViz');
-  const orig = ARCH_STAT_PROFILES[remapState.originalArchetype] || ARCH_STAT_PROFILES.esportivo;
-  const newP = ARCH_STAT_PROFILES[remapState.targetArchetype] || ARCH_STAT_PROFILES.esportivo;
+  const piPreview = document.getElementById('piPreview');
+  
+  if (!currentPreviewData) {
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:10px">Loading DNA...</div>';
+    return;
+  }
+  
+  const orig = currentPreviewData.original || {};
+  const final = currentPreviewData.final || {};
+  
   const stats = ['top_speed', 'acceleration', 'handling', 'braking'];
   container.innerHTML = stats.map(s => {
     const origPct = orig[s] || 50;
-    const newPct = (newP[s] * 0.75 + origPct * 0.25); // 75/25 blend
+    const newPct = final[s] || 50;
     return `<div class="dna-segment">
       <div class="dna-seg-label"><span>${STAT_LABELS[s]}</span><span style="color:var(--cyan)">${newPct.toFixed(0)}</span></div>
       <div class="dna-seg-bar">
@@ -135,6 +170,14 @@ function buildDNAViz() {
       </div>
     </div>`;
   }).join('');
+  
+  if (currentPreviewData.score !== undefined && currentPreviewData.rank) {
+    const rank = currentPreviewData.rank;
+    piPreview.innerHTML = `PI: <span style="color:#fff">${currentPreviewData.score}</span> | CLASS: <span style="color:${rank.color}">${rank.name}</span>`;
+    piPreview.style.borderColor = rank.color;
+    piPreview.style.color = rank.color;
+    piPreview.style.background = rank.color + '15';
+  }
 }
 
 // ── Summary ──
@@ -227,6 +270,7 @@ window.addEventListener('message', e => {
     updateDNABar();
     updateSummary();
     calcCost();
+    requestPreview();
     document.body.classList.add('visible');
   }
 
