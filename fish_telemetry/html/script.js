@@ -14,43 +14,43 @@ let state = {
 
 // ── Telemetry rows config ──
 const ROWS = [
-  { key: 'time0_100', label: '0 → 100 km/h',   unit: 's',  decimals: 2 },
-  { key: 'time0_200', label: '0 → 200 km/h',   unit: 's',  decimals: 2 },
-  { key: 'time100_0', label: '100 → 0 km/h',   unit: 's',  decimals: 2 },
-  { key: 'dist100_0', label: '↳ Braking Dist',  unit: 'm',  decimals: 0 },
-  { key: 'time200_0', label: '200 → 0 km/h',   unit: 's',  decimals: 2 },
-  { key: 'dist200_0', label: '↳ Braking Dist',  unit: 'm',  decimals: 0 },
-  { key: 'maxSpeed',  label: 'Max Speed',       unit: 'km/h', decimals: 1 },
-  { key: 'bestGForce',label: 'Best Lat G',      unit: 'G',  decimals: 2 },
+  { key: 'time0_100', label: '0 → 100 km/h', unit: 's', decimals: 2 },
+  { key: 'time0_200', label: '0 → 200 km/h', unit: 's', decimals: 2 },
+  { key: 'time100_0', label: '100 → 0 km/h', unit: 's', decimals: 2 },
+  { key: 'dist100_0', label: '↳ Braking Dist', unit: 'm', decimals: 0 },
+  { key: 'time200_0', label: '200 → 0 km/h', unit: 's', decimals: 2 },
+  { key: 'dist200_0', label: '↳ Braking Dist', unit: 'm', decimals: 0 },
+  { key: 'maxSpeed', label: 'Max Speed', unit: 'km/h', decimals: 1 },
+  { key: 'bestGForce', label: 'Best Lat G', unit: 'G', decimals: 2 },
 ];
 
 // Version colours
 const VER_COLORS = ['#00d4ff', '#ff6b00', '#a855f7', '#00ff88', '#ffd600'];
-const VER_CLASS  = ['', 'v2', 'v3', 'v4', 'v5'];
+const VER_CLASS = ['', 'v2', 'v3', 'v4', 'v5'];
 
 // ── DOM refs ──
-const speedVal    = document.getElementById('speedVal');
-const speedoArc   = document.getElementById('speedoArc');
-const gforceVal   = document.getElementById('gforceVal');
-const gforceBar   = document.getElementById('gforceBar');
+const speedVal = document.getElementById('speedVal');
+const speedoArc = document.getElementById('speedoArc');
+const gforceVal = document.getElementById('gforceVal');
+const gforceBar = document.getElementById('gforceBar');
 const maxSpeedVal = document.getElementById('maxSpeedVal');
-const bestGVal    = document.getElementById('bestGVal');
-const recBadge    = document.getElementById('recBadge');
-const vehName     = document.getElementById('vehName');
-const vehPlate    = document.getElementById('vehPlate');
-const vehPi       = document.getElementById('vehPi');
+const bestGVal = document.getElementById('bestGVal');
+const recBadge = document.getElementById('recBadge');
+const vehName = document.getElementById('vehName');
+const vehPlate = document.getElementById('vehPlate');
+const vehPi = document.getElementById('vehPi');
 const versionPills = document.getElementById('versionPills');
-const idleScreen  = document.getElementById('idleScreen');
+const idleScreen = document.getElementById('idleScreen');
 const liveResults = document.getElementById('liveResults');
-const tableHead   = document.getElementById('tableHead');
-const tableBody   = document.getElementById('tableBody');
-const btnStart    = document.getElementById('btnStart');
-const btnStop     = document.getElementById('btnStop');
+const tableHead = document.getElementById('tableHead');
+const tableBody = document.getElementById('tableBody');
+const btnStart = document.getElementById('btnStart');
+const btnStop = document.getElementById('btnStop');
 
 // ── Arc Speedometer Math ──
 // Arc path length = ~258 units (semicircle)
 const ARC_LENGTH = 258;
-const MAX_SPEED  = 340; // km/h max displayed
+const MAX_SPEED = 340; // km/h max displayed
 
 function updateArc(speed) {
   const pct = Math.min(speed / MAX_SPEED, 1);
@@ -68,32 +68,41 @@ function updateArc(speed) {
 
 // ── Live Telemetry Update ──
 function onLiveTelemetry(data) {
-  const spd = Math.round(data.speed || 0);
-  speedVal.textContent  = spd;
-  speedVal.style.color  = spd > 200 ? '#ff1744' : spd > 100 ? '#ff6b00' : '#00d4ff';
-  updateArc(spd);
+  // FIX: only update HUD values when they are present in the delta
+  // (undefined means "not changed this frame" — don't overwrite with 0)
+  if (data.speed !== undefined) {
+    const spd = Math.round(data.speed);
+    speedVal.textContent = spd;
+    speedVal.style.color = spd > 200 ? '#ff1744' : spd > 100 ? '#ff6b00' : '#00d4ff';
+    updateArc(spd);
+  }
 
-  const g = data.gForce || 0;
-  gforceVal.textContent = g.toFixed(2) + 'G';
-  gforceBar.style.width = Math.min(g / 4 * 100, 100) + '%';
+  if (data.gForce !== undefined) {
+    const g = data.gForce;
+    gforceVal.textContent = g.toFixed(2) + 'G';
+    gforceBar.style.width = Math.min(g / 4 * 100, 100) + '%';
+  }
 
-  maxSpeedVal.textContent = data.maxSpeed ? Math.round(data.maxSpeed) + '' : '—';
-  bestGVal.textContent    = data.bestGForce ? data.bestGForce.toFixed(2) + 'G' : '—';
+  if (data.maxSpeed !== undefined) {
+    maxSpeedVal.textContent = Math.round(data.maxSpeed) + '';
+  }
+  if (data.bestGForce !== undefined) {
+    bestGVal.textContent = data.bestGForce.toFixed(2) + 'G';
+  }
 
   // Update active version cells
   if (state.versions.length > 0) {
     const ver = state.versions[state.activeVersionIdx];
     if (ver) {
-      Object.assign(ver, {
-        time0_100:  data.time0_100,
-        time0_200:  data.time0_200,
-        time100_0:  data.time100_0,
-        dist100_0:  data.dist100_0,
-        time200_0:  data.time200_0,
-        dist200_0:  data.dist200_0,
-        maxSpeed:   data.maxSpeed,
-        bestGForce: data.bestGForce,
-      });
+      // FIX: only overwrite fields that are actually present in the delta
+      // (undefined fields in the delta would otherwise erase existing values)
+      const fields = ['time0_100', 'time0_200', 'time100_0', 'dist100_0',
+        'time200_0', 'dist200_0', 'maxSpeed', 'bestGForce'];
+      for (const f of fields) {
+        if (data[f] !== undefined) {
+          ver[f] = data[f];
+        }
+      }
       refreshTable();
     }
   }
@@ -175,7 +184,7 @@ function refreshTable() {
           dist100_0: ver.sm_measuring_100_0,
           time200_0: ver.sm_measuring_200_0,
           dist200_0: ver.sm_measuring_200_0,
-          maxSpeed:  true,
+          maxSpeed: true,
           bestGForce: true,
         };
         if (isActive && needs[row.key]) {
@@ -238,8 +247,8 @@ window.addEventListener('message', e => {
       state.isRecording = true;
       state.versions = [];
       state.activeVersionIdx = 0;
-      vehName.textContent   = msg.vehicleName || '—';
-      vehPlate.textContent  = msg.plate || '——————';
+      vehName.textContent = msg.vehicleName || '—';
+      vehPlate.textContent = msg.plate || '——————';
       recBadge.classList.add('active');
       idleScreen.style.display = 'none';
       liveResults.style.display = 'block';
@@ -285,7 +294,7 @@ window.addEventListener('message', e => {
       state.isRecording = false;
       recBadge.classList.remove('active');
       btnStart.style.display = 'flex';
-      btnStop.style.display  = 'none';
+      btnStop.style.display = 'none';
       if (msg.versions) {
         state.versions = msg.versions;
         renderVersionPills();

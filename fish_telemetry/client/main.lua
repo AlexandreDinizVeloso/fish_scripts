@@ -11,6 +11,13 @@ local isNuiOpen     = false
 local currentVehicle = nil
 
 -- ============================================================
+-- Version cooldown: prevent rapid-fire new version creation
+-- ============================================================
+
+local lastVersionCreateTime = 0
+local VERSION_COOLDOWN_MS = 15000  -- 15s mínimo entre novas versões
+
+-- ============================================================
 -- Telemetry Session Data
 -- ============================================================
 
@@ -116,30 +123,39 @@ local function GetVersionLabel(sig, idx)
 end
 
 local function MaybeCreateNewVersion()
+    local now = GetGameTimer()
+    if not now then return end  -- protege contra nil
+
+    -- Cooldown: não cria versão nova se criou uma há menos de 15s
+    if now - lastVersionCreateTime < VERSION_COOLDOWN_MS then return end
+
     local sig = GetCurrentVehicleSignature()
     if not sig then return end
 
-    -- If no version or score changed significantly (>5 pts) → new version
+    -- Se não tem versão ainda, cria a primeira
     if not currentVersion then
         local idx   = #versions + 1
         local label = GetVersionLabel(sig, idx)
         currentVersion = NewVersionSnapshot(label, sig.score, sig.archetype, 0)
         table.insert(versions, currentVersion)
+        lastVersionCreateTime = now
         return
     end
 
+    -- Só cria nova versão se a mudança for REALMENTE significativa
     local scoreDiff = math.abs((currentVersion.score or 0) - (sig.score or 0))
     if scoreDiff >= 5 or currentVersion.archetype ~= sig.archetype then
-        -- Freeze current version
-        currentVersion.endTime = GetGameTimer()
+        -- Congela versão atual
+        currentVersion.endTime = now
 
-        -- Create new version
+        -- Cria nova versão
         local idx   = #versions + 1
         local label = GetVersionLabel(sig, idx)
         currentVersion = NewVersionSnapshot(label, sig.score, sig.archetype, 0)
         table.insert(versions, currentVersion)
+        lastVersionCreateTime = now
 
-        -- Notify NUI
+        -- Notifica NUI
         if isNuiOpen then
             SendNUIMessage({ action = 'newVersion', label = label, versionCount = #versions })
         end
@@ -161,9 +177,10 @@ AddStateBagChangeHandler('fish_physics_matrix', nil, function(bagName, key, valu
     if not netId then return end
     local myVeh = NetworkGetEntityFromNetworkId(netId)
     if myVeh == veh then
-        -- Debounce: wait 500ms then check
+        -- Debounce: wait 1000ms then check
         Citizen.CreateThread(function()
-            Citizen.Wait(500)
+            Citizen.Wait(1000)
+            if not isRecording then return end
             MaybeCreateNewVersion()
         end)
     end
@@ -179,6 +196,7 @@ local prevVelTime  = 0
 local function CalculateLateralGForce(vehicle)
     local vel = GetEntityVelocity(vehicle)
     local now = GetGameTimer()
+    if not now then return 0 end
     local dt  = (now - prevVelTime) / 1000.0
     if dt <= 0 then return 0 end
 
@@ -266,166 +284,170 @@ local function StartSampling(vehicle)
     Citizen.CreateThread(function()
         while isRecording and DoesEntityExist(vehicle) do
             local now      = GetGameTimer()
-            local speedMS  = GetEntitySpeed(vehicle)  -- m/s
-            local speedKMH = speedMS * 3.6
-            local pos      = GetEntityCoords(vehicle)
-            local gForce   = CalculateLateralGForce(vehicle)
+            if not now then
+                Citizen.Wait(SAMPLE_INTERVAL)
+            else
+                local speedMS  = GetEntitySpeed(vehicle)  -- m/s
+                local speedKMH = speedMS * 3.6
+                local pos      = GetEntityCoords(vehicle)
+                local gForce   = CalculateLateralGForce(vehicle)
 
-            -- Check tire contact (G-force only when gripping)
-            tireInContact = GetEntityHeightAboveGround(vehicle) < 1.0
+                -- Check tire contact (G-force only when gripping)
+                tireInContact = GetEntityHeightAboveGround(vehicle) < 1.0
 
-            -- Record sample
-            if now - lastSampleTime >= SAMPLE_INTERVAL then
-                lastSampleTime = now
-                table.insert(currentVersion.samples, { t = now, spd = speedKMH })
-            end
+                -- Record sample
+                if now - lastSampleTime >= SAMPLE_INTERVAL then
+                    lastSampleTime = now
+                    table.insert(currentVersion.samples, { t = now, spd = speedKMH })
+                end
 
-            -- Update max speed
-            if speedKMH > currentVersion.maxSpeed then
-                currentVersion.maxSpeed = speedKMH
-            end
+                -- Update max speed
+                if speedKMH > currentVersion.maxSpeed then
+                    currentVersion.maxSpeed = speedKMH
+                end
 
-            -- G-force tracking (only when gripping)
-            if tireInContact and gForce > currentVersion.bestGForce then
-                currentVersion.bestGForce = gForce
-            end
-            if tireInContact then
-                currentVersion.lastGForce = gForce
-            end
+                -- G-force tracking (only when gripping)
+                if tireInContact and gForce > currentVersion.bestGForce then
+                    currentVersion.bestGForce = gForce
+                end
+                if tireInContact then
+                    currentVersion.lastGForce = gForce
+                end
 
-            -- Inputs for precise measurement starting
-            local isThrottling = IsControlPressed(0, 32) or IsControlPressed(0, 87) or IsControlPressed(2, 71) -- W, Gamepad throttle
-            local isBraking = IsControlPressed(0, 72) or IsControlPressed(0, 76) or IsControlPressed(2, 72) or IsControlPressed(0, 88) -- S, Handbrake, Gamepad brake
+                -- Inputs for precise measurement starting
+                local isThrottling = IsControlPressed(0, 32) or IsControlPressed(0, 87) or IsControlPressed(2, 71) -- W, Gamepad throttle
+                local isBraking = IsControlPressed(0, 72) or IsControlPressed(0, 76) or IsControlPressed(2, 72) or IsControlPressed(0, 88) -- S, Handbrake, Gamepad brake
 
-            -- ── 0→100 state machine ──────────────────────────
-            local sm01 = currentVersion.sm_0_100
-            if sm01.phase == 'waiting' and speedKMH < 2.0 then
-                sm01.phase = 'ready'
-            elseif sm01.phase == 'ready' and speedKMH >= 2.0 and isThrottling then
-                sm01.phase     = 'measuring'
-                sm01.startTime = now
-                sm01.startSpd  = speedKMH
-            elseif sm01.phase == 'measuring' then
-                if speedKMH >= 100 then
-                    sm01.phase = 'done'
-                    local elapsed = (now - sm01.startTime) / 1000.0
-                    -- Interpolate back to exact 100 if we overshot
-                    if sm01.startSpd then
-                        local overshoot = (speedKMH - 100) / (speedKMH - sm01.startSpd)
-                        elapsed = elapsed - (overshoot * SAMPLE_INTERVAL / 1000.0)
+                -- ── 0→100 state machine ──────────────────────────
+                local sm01 = currentVersion.sm_0_100
+                if sm01.phase == 'waiting' and speedKMH < 2.0 then
+                    sm01.phase = 'ready'
+                elseif sm01.phase == 'ready' and speedKMH >= 2.0 and isThrottling then
+                    sm01.phase     = 'measuring'
+                    sm01.startTime = now
+                    sm01.startSpd  = speedKMH
+                elseif sm01.phase == 'measuring' then
+                    if speedKMH >= 100 then
+                        sm01.phase = 'done'
+                        local elapsed = (now - sm01.startTime) / 1000.0
+                        -- Interpolate back to exact 100 if we overshot
+                        if sm01.startSpd then
+                            local overshoot = (speedKMH - 100) / (speedKMH - sm01.startSpd)
+                            elapsed = elapsed - (overshoot * SAMPLE_INTERVAL / 1000.0)
+                        end
+                        currentVersion.time0_100 = math.max(0.1, elapsed)
+                    elseif not isThrottling and speedKMH < 5.0 then
+                        -- Reset if they aborted the run
+                        sm01.phase = 'waiting'
                     end
-                    currentVersion.time0_100 = math.max(0.1, elapsed)
-                elseif not isThrottling and speedKMH < 5.0 then
-                    -- Reset if they aborted the run
-                    sm01.phase = 'waiting'
                 end
+
+                -- ── 0→200 state machine ──────────────────────────
+                local sm02 = currentVersion.sm_0_200
+                if sm02.phase == 'waiting' and speedKMH < 2.0 then
+                    sm02.phase = 'ready'
+                elseif sm02.phase == 'ready' and speedKMH >= 2.0 and isThrottling then
+                    sm02.phase     = 'measuring'
+                    sm02.startTime = now
+                elseif sm02.phase == 'measuring' then
+                    if speedKMH >= 200 then
+                        sm02.phase = 'done'
+                        currentVersion.time0_200 = (now - sm02.startTime) / 1000.0
+                    elseif not isThrottling and speedKMH < 5.0 then
+                        sm02.phase = 'waiting'
+                    end
+                end
+
+                -- ── 100→0 state machine ──────────────────────────
+                local sm10 = currentVersion.sm_100_0
+                if sm10.phase == 'waiting' and speedKMH >= 100 then
+                    sm10.phase = 'ready'
+                elseif sm10.phase == 'ready' then
+                    if isBraking then
+                        sm10.phase     = 'measuring'
+                        sm10.startTime = now
+                        sm10.startPos  = vector3(pos.x, pos.y, pos.z)
+                        sm10.startSpd  = speedKMH
+                    elseif speedKMH < 90 then
+                        -- Reset if speed drops below target without braking
+                        sm10.phase = 'waiting'
+                    end
+                elseif sm10.phase == 'measuring' then
+                    if speedKMH < 2.0 then
+                        sm10.phase = 'done'
+                        local endTime = now
+                        local dist    = #(vector3(pos.x, pos.y, pos.z) - sm10.startPos)
+                        currentVersion.time100_0 = (endTime - sm10.startTime) / 1000.0
+                        currentVersion.dist100_0 = dist
+                        -- Reset so it can be triggered again
+                        sm10.phase = 'waiting'
+                    elseif not isBraking and speedKMH > sm10.startSpd then
+                        -- Aborted braking run by accelerating again
+                        sm10.phase = 'waiting'
+                    end
+                end
+
+                -- ── 200→0 state machine ──────────────────────────
+                local sm20 = currentVersion.sm_200_0
+                if sm20.phase == 'waiting' and speedKMH >= 200 then
+                    sm20.phase = 'ready'
+                elseif sm20.phase == 'ready' then
+                    if isBraking then
+                        sm20.phase     = 'measuring'
+                        sm20.startTime = now
+                        sm20.startPos  = vector3(pos.x, pos.y, pos.z)
+                        sm20.startSpd  = speedKMH
+                    elseif speedKMH < 180 then
+                        sm20.phase = 'waiting'
+                    end
+                elseif sm20.phase == 'measuring' then
+                    if speedKMH < 2.0 then
+                        sm20.phase = 'done'
+                        local endTime = now
+                        local dist    = #(vector3(pos.x, pos.y, pos.z) - sm20.startPos)
+                        currentVersion.time200_0 = (endTime - sm20.startTime) / 1000.0
+                        currentVersion.dist200_0 = dist
+                        sm20.phase = 'waiting'
+                    elseif not isBraking and speedKMH > sm20.startSpd then
+                        sm20.phase = 'waiting'
+                    end
+                end
+
+                -- Delta-Encoding: apenas campos com mutação além de ε são despachados via IPC
+                -- Payload deltaPayload é pré-alocado (Zero-Allocation), anulado após despacho
+                if isNuiOpen then
+                    -- checkDelta usa inversão algébrica FMUL (poupa FDIV) e threshold ε = 1%
+                    local changed = false
+
+                    if checkDelta('speed', speedKMH) then changed = true end
+                    if checkDelta('maxSpeed', currentVersion.maxSpeed) then changed = true end
+                    if checkDelta('gForce', gForce, 0.05) then changed = true end          -- ε = 5% (gForce é mais ruidoso)
+                    if checkDelta('time0_100', currentVersion.time0_100) then changed = true end
+                    if checkDelta('time0_200', currentVersion.time0_200) then changed = true end
+                    if checkDelta('time100_0', currentVersion.time100_0) then changed = true end
+                    if checkDelta('dist100_0', currentVersion.dist100_0) then changed = true end
+                    if checkDelta('time200_0', currentVersion.time200_0) then changed = true end
+                    if checkDelta('dist200_0', currentVersion.dist200_0) then changed = true end
+                    if checkDelta('bestGForce', currentVersion.bestGForce) then changed = true end
+
+                    -- Campo booleano isRecording: envia no primeiro frame apenas
+                    if lastTelemetryState.isRecording ~= true then
+                        deltaPayload.isRecording = true
+                        lastTelemetryState.isRecording = true
+                        changed = true
+                    end
+
+                    -- Só despacha via IPC se houver ao menos uma mutação significativa
+                    if changed then
+                        SendNUIMessage(deltaPayload)
+                    end
+
+                    -- Reset das chaves mortas: anula ponteiros em O(1) sem realocar a tabela
+                    ResetDeltaPayload()
+                end
+
+                Citizen.Wait(SAMPLE_INTERVAL)
             end
-
-            -- ── 0→200 state machine ──────────────────────────
-            local sm02 = currentVersion.sm_0_200
-            if sm02.phase == 'waiting' and speedKMH < 2.0 then
-                sm02.phase = 'ready'
-            elseif sm02.phase == 'ready' and speedKMH >= 2.0 and isThrottling then
-                sm02.phase     = 'measuring'
-                sm02.startTime = now
-            elseif sm02.phase == 'measuring' then
-                if speedKMH >= 200 then
-                    sm02.phase = 'done'
-                    currentVersion.time0_200 = (now - sm02.startTime) / 1000.0
-                elseif not isThrottling and speedKMH < 5.0 then
-                    sm02.phase = 'waiting'
-                end
-            end
-
-            -- ── 100→0 state machine ──────────────────────────
-            local sm10 = currentVersion.sm_100_0
-            if sm10.phase == 'waiting' and speedKMH >= 100 then
-                sm10.phase = 'ready'
-            elseif sm10.phase == 'ready' then
-                if isBraking then
-                    sm10.phase     = 'measuring'
-                    sm10.startTime = now
-                    sm10.startPos  = vector3(pos.x, pos.y, pos.z)
-                    sm10.startSpd  = speedKMH
-                elseif speedKMH < 90 then
-                    -- Reset if speed drops below target without braking
-                    sm10.phase = 'waiting'
-                end
-            elseif sm10.phase == 'measuring' then
-                if speedKMH < 2.0 then
-                    sm10.phase = 'done'
-                    local endTime = now
-                    local dist    = #(vector3(pos.x, pos.y, pos.z) - sm10.startPos)
-                    currentVersion.time100_0 = (endTime - sm10.startTime) / 1000.0
-                    currentVersion.dist100_0 = dist
-                    -- Reset so it can be triggered again
-                    sm10.phase = 'waiting'
-                elseif not isBraking and speedKMH > sm10.startSpd then
-                    -- Aborted braking run by accelerating again
-                    sm10.phase = 'waiting'
-                end
-            end
-
-            -- ── 200→0 state machine ──────────────────────────
-            local sm20 = currentVersion.sm_200_0
-            if sm20.phase == 'waiting' and speedKMH >= 200 then
-                sm20.phase = 'ready'
-            elseif sm20.phase == 'ready' then
-                if isBraking then
-                    sm20.phase     = 'measuring'
-                    sm20.startTime = now
-                    sm20.startPos  = vector3(pos.x, pos.y, pos.z)
-                    sm20.startSpd  = speedKMH
-                elseif speedKMH < 180 then
-                    sm20.phase = 'waiting'
-                end
-            elseif sm20.phase == 'measuring' then
-                if speedKMH < 2.0 then
-                    sm20.phase = 'done'
-                    local endTime = now
-                    local dist    = #(vector3(pos.x, pos.y, pos.z) - sm20.startPos)
-                    currentVersion.time200_0 = (endTime - sm20.startTime) / 1000.0
-                    currentVersion.dist200_0 = dist
-                    sm20.phase = 'waiting'
-                elseif not isBraking and speedKMH > sm20.startSpd then
-                    sm20.phase = 'waiting'
-                end
-            end
-
-            -- Delta-Encoding: apenas campos com mutação além de ε são despachados via IPC
-            -- Payload deltaPayload é pré-alocado (Zero-Allocation), anulado após despacho
-            if isNuiOpen then
-                -- checkDelta usa inversão algébrica FMUL (poupa FDIV) e threshold ε = 1%
-                local changed = false
-
-                if checkDelta('speed', speedKMH) then changed = true end
-                if checkDelta('maxSpeed', currentVersion.maxSpeed) then changed = true end
-                if checkDelta('gForce', gForce, 0.05) then changed = true end          -- ε = 5% (gForce é mais ruidoso)
-                if checkDelta('time0_100', currentVersion.time0_100) then changed = true end
-                if checkDelta('time0_200', currentVersion.time0_200) then changed = true end
-                if checkDelta('time100_0', currentVersion.time100_0) then changed = true end
-                if checkDelta('dist100_0', currentVersion.dist100_0) then changed = true end
-                if checkDelta('time200_0', currentVersion.time200_0) then changed = true end
-                if checkDelta('dist200_0', currentVersion.dist200_0) then changed = true end
-                if checkDelta('bestGForce', currentVersion.bestGForce) then changed = true end
-
-                -- Campo booleano isRecording: envia no primeiro frame apenas
-                if lastTelemetryState.isRecording ~= true then
-                    deltaPayload.isRecording = true
-                    lastTelemetryState.isRecording = true
-                    changed = true
-                end
-
-                -- Só despacha via IPC se houver ao menos uma mutação significativa
-                if changed then
-                    SendNUIMessage(deltaPayload)
-                end
-
-                -- Reset das chaves mortas: anula ponteiros em O(1) sem realocar a tabela
-                ResetDeltaPayload()
-            end
-
-            Citizen.Wait(SAMPLE_INTERVAL)
         end
     end)
 end
@@ -543,6 +565,7 @@ local function StartRecording()
     sessionStartTime = GetGameTimer()
     prevVelocity     = GetEntityVelocity(veh)
     prevVelTime      = GetGameTimer()
+    lastVersionCreateTime = 0  -- reseta cooldown ao iniciar gravação
 
     -- Create first version snapshot
     MaybeCreateNewVersion()
