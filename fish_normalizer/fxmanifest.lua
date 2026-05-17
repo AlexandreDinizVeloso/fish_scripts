@@ -25,6 +25,7 @@ shared_scripts {
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'shared/database.lua',
+    'server/lut_generator.lua',
     'server/main.lua'
 }
 

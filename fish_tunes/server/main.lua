@@ -273,7 +273,6 @@ AddEventHandler('fish_tunes:convertDrivetrain', function(plate, drivetrain, vehi
     DBSaveTunes(plate, existing, identifier)
 
     if vehicleNetId and vehicleNetId > 0 then
-        TriggerClientEvent('fish_tunes:applyDrivetrain', src, plate, drivetrain)
         RefreshVehicleState(plate, vehicleNetId, existing)
     end
 

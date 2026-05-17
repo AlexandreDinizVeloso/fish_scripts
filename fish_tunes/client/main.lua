@@ -482,21 +482,10 @@ AddEventHandler('fish_tunes:healthData', function(healthData)
     end
 end)
 
--- Apply drivetrain from server
-RegisterNetEvent('fish_tunes:applyDrivetrain')
-AddEventHandler('fish_tunes:applyDrivetrain', function(plate, drivetrain)
-    local vehicle = GetCurrentVehicle()
-    if vehicle then
-        if not tunesData[plate] then tunesData[plate] = {} end
-        tunesData[plate].drivetrain = drivetrain
-        exports.fish_tunes:ApplyDrivetrainModifiers(vehicle, drivetrain)
-        exports.fish_tunes:ClearDrivetrainCache(plate)
-        TriggerEvent('fish_tunes:performanceUpdated', plate, tunesData[plate])
-    end
-end)
+-- Legacy applyDrivetrain RPC removed (replaced by OneSync State Bag Observer pattern in drivetrain.lua)
 
 -- ============================================================
--- Initialization
+-- Initialization & Modules Loaded Event Dispatch
 -- ============================================================
 
 Citizen.CreateThread(function()
@@ -539,4 +528,11 @@ exports('GetPartBonuses', function(category, level)
         return Config.PartBonuses[category][level]
     end
     return nil
+end)
+
+-- Dispatch global Pub-Sub loaded event
+Citizen.CreateThread(function()
+    Citizen.Wait(2000)
+    TriggerEvent('fish_tunes:modulesLoaded')
+    print('[fish_tunes] Modules loaded successfully. Dispatched global event.')
 end)

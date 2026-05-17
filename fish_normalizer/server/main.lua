@@ -109,14 +109,10 @@ local function CalculateDisplayScore(dbScore, tunePI, remapPI)
     local rawUpgrades = (tunePI or 0) + (remapPI or 0)
     if rawUpgrades <= 0 then return math.floor(dbScore) end
     
-    local headroom = 1000.0 - dbScore
-    if headroom <= 0 then return 1000 end
+    local baseIdx = math.max(0, math.min(1000, math.floor(dbScore)))
+    local scale = PI_LUT[baseIdx] or 0.0
     
-    -- Asymptotically damp upgrade gains as vehicle approaches 1000 PI
-    local dampFactor = math.exp(-rawUpgrades / 450.0)
-    local finalScore = 1000.0 - headroom * dampFactor
-    
-    return math.max(0, math.min(1000, math.floor(finalScore)))
+    return math.max(0, math.min(1000, math.floor(dbScore + rawUpgrades * scale)))
 end
 
 -- ============================================================
@@ -213,6 +209,9 @@ function PushVehicleState(netId, data, remapData, tuneData)
     entityState:set('fish:archetype', archetype,       true)
     entityState:set('fish:handling',  handlingProfile, true)
     entityState:set('fish:heat',      (tuneData and tuneData.heat) or 0, true)
+    
+    local drivetrain = (tuneData and tuneData.drivetrain) or 'FWD'
+    entityState:set('fish_drivetrain', drivetrain, true)
 
     -- FIX: Do NOT overwrite data.score or data.rank in the cache.
     -- The authoritative normalization score must be preserved.

@@ -12,6 +12,7 @@ local originalSuspensionCache = {}  -- Persistent authentic suspension values (n
 local remapData = {}                -- Remap data pushed from fish_remaps
 local tuneData = {}                 -- Tune data pushed from fish_tunes
 local appliedPlates = {}            -- Track which plates have been applied this session
+local isReady = false               -- Pub-Sub Ready State Flag
 
 -- ============================================================
 -- Data Push Event Handlers
@@ -106,6 +107,14 @@ local function GetTuneMultipliers(plate)
             handling = 0,
             braking = 0
         }
+    end
+    
+    -- Check if exports are ready before proceeding
+    if GetResourceState('fish_tunes') == 'started' then
+        local ready = pcall(function() return exports.fish_tunes:GetPartBonuses('engine', 'stock') end)
+        if not ready then
+            return nil  -- Signals to caller that exports are not ready yet, retry required
+        end
     end
     
     -- Calculate total bonuses from parts
@@ -215,6 +224,20 @@ function ApplyPerformanceModifications(vehicle)
     
     -- Retrieve authoritative base handling profile from server state bag to completely prevent compounding loops
     local stateBagProfile = Entity(vehicle).state['fish:handling']
+    local fishScore = Entity(vehicle).state['fish:score']
+    
+    -- Guard: If vehicle is unnormalized (has no score in state bag after a brief check), exit and leave stock vanilla untouched
+    if not fishScore and not stateBagProfile then
+        return
+    end
+    
+    -- Get tune bonuses (raw percentage values from fish_tunes config)
+    local tuneBonus = GetTuneMultipliers(plate)
+    if not tuneBonus then
+        -- Exports not fully ready yet, do NOT mark as applied, retry on next frame/entry
+        return
+    end
+    
     local cache = {}
     
     if stateBagProfile and type(stateBagProfile) == 'table' then
@@ -257,9 +280,6 @@ function ApplyPerformanceModifications(vehicle)
     -- Get remap multipliers (maps finalStats 0-100 to 0.8x to 1.2x)
     local remapMult = GetRemapMultipliers(plate)
     
-    -- Get tune bonuses (raw percentage values from fish_tunes config)
-    local tuneBonus = GetTuneMultipliers(plate)
-    
     -- Start from base values
     local finalTopSpeed = cache.fInitialDriveMaxFlatVel
     local finalAccel = cache.fInitialDriveForce
@@ -287,7 +307,10 @@ function ApplyPerformanceModifications(vehicle)
     finalTractionMin = finalTractionMin * (1.0 + (tuneBonus.handling / 200.0))
     
     -- Layer 3: Apply drivetrain layout multipliers (Clean Consolidation)
-    local drivetrain = tune and tune.drivetrain
+    local drivetrain = Entity(vehicle).state['fish_drivetrain']
+    if not drivetrain then
+        drivetrain = tune and tune.drivetrain
+    end
     if not drivetrain then
         local driveBias = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fDriveBiasFront')
         if driveBias == 0.0 then drivetrain = "RWD"
@@ -467,6 +490,27 @@ function ApplyPerformanceModifications(vehicle)
 end
 
 -- ============================================================
+-- Pub-Sub Initialization: Wait for fish_tunes to load
+-- ============================================================
+AddEventHandler('fish_tunes:modulesLoaded', function()
+    if isReady then return end
+    isReady = true
+    print('[fish_normalizer] Modules loaded event intercepted. PI Normalizer initialized and active.')
+    TriggerServerEvent('fish_normalizer:requestPerformanceData')
+end)
+
+-- Fallback check in case fish_normalizer is restarted in-game
+Citizen.CreateThread(function()
+    Citizen.Wait(1000)
+    if not isReady and GetResourceState('fish_tunes') == 'started' then
+        Citizen.Wait(1000)
+        isReady = true
+        print('[fish_normalizer] Fallback ready state triggered on resource restart.')
+        TriggerServerEvent('fish_normalizer:requestPerformanceData')
+    end
+end)
+
+-- ============================================================
 -- Vehicle Entry Detection Thread
 -- ============================================================
 
@@ -476,20 +520,22 @@ Citizen.CreateThread(function()
     while true do
         Citizen.Wait(500)
         
-        local ped = PlayerPedId()
-        if IsPedInAnyVehicle(ped, false) then
-            local vehicle = GetVehiclePedIsIn(ped, false)
-            if vehicle ~= 0 and DoesEntityExist(vehicle) and GetPedInVehicleSeat(vehicle, -1) == ped then
-                local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
-                
-                -- Apply on vehicle change OR if not yet applied
-                if vehicle ~= lastVehicle or not appliedPlates[plate] then
-                    lastVehicle = vehicle
-                    ApplyPerformanceModifications(vehicle)
+        if isReady then
+            local ped = PlayerPedId()
+            if IsPedInAnyVehicle(ped, false) then
+                local vehicle = GetVehiclePedIsIn(ped, false)
+                if vehicle ~= 0 and DoesEntityExist(vehicle) and GetPedInVehicleSeat(vehicle, -1) == ped then
+                    local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+                    
+                    -- Apply on vehicle change OR if not yet applied
+                    if vehicle ~= lastVehicle or not appliedPlates[plate] then
+                        lastVehicle = vehicle
+                        ApplyPerformanceModifications(vehicle)
+                    end
                 end
+            else
+                lastVehicle = nil
             end
-        else
-            lastVehicle = nil
         end
     end
 end)
@@ -530,10 +576,9 @@ AddEventHandler('fish_normalizer:receivePerformanceData', function(rData, tData)
     end
 end)
 
--- Request saved performance data from server on spawn
-Citizen.CreateThread(function()
-    Citizen.Wait(5000)  -- Wait for other resources to load
-    TriggerServerEvent('fish_normalizer:requestPerformanceData')
+exports('ClearDrivetrainCache', function(plate)
+    originalHandlingCache[plate] = nil
+    appliedPlates[plate] = nil
 end)
 
 exports('GetActivePerformanceData', function(plate)
