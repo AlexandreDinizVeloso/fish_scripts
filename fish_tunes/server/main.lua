@@ -835,3 +835,7 @@ exports('AddHeat', AddHeat)
 exports('GetPartBonuses', function()
     return Config.PartBonuses
 end)
+
+-- Declare Global State Bag to signal all other resources that fish_tunes has loaded successfully
+GlobalState.fish_tunes_ready = true
+print('[fish_tunes] Server-side GlobalState.fish_tunes_ready set to true. Modules ready.')

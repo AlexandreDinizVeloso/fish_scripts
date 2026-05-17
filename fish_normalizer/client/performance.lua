@@ -223,8 +223,9 @@ function ApplyPerformanceModifications(vehicle)
     end
     
     -- Retrieve authoritative base handling profile from server state bag to completely prevent compounding loops
-    local stateBagProfile = Entity(vehicle).state['fish:handling']
-    local fishScore = Entity(vehicle).state['fish:score']
+    local physicsMatrix = Entity(vehicle).state['fish_physics_matrix']
+    local stateBagProfile = physicsMatrix and physicsMatrix.handling
+    local fishScore = physicsMatrix and physicsMatrix.score
     
     -- Guard: If vehicle is unnormalized (has no score in state bag after a brief check), exit and leave stock vanilla untouched
     if not fishScore and not stateBagProfile then
@@ -307,7 +308,7 @@ function ApplyPerformanceModifications(vehicle)
     finalTractionMin = finalTractionMin * (1.0 + (tuneBonus.handling / 200.0))
     
     -- Layer 3: Apply drivetrain layout multipliers (Clean Consolidation)
-    local drivetrain = Entity(vehicle).state['fish_drivetrain']
+    local drivetrain = physicsMatrix and physicsMatrix.drivetrain
     if not drivetrain then
         drivetrain = tune and tune.drivetrain
     end
@@ -497,41 +498,34 @@ function ApplyPerformanceModifications(vehicle)
 end
 
 -- ============================================================
--- Pub-Sub Initialization: Wait for fish_tunes to load
--- Subscribes and immediately detaches to prevent heap leaks/clutter
+-- State Synchronization: Wait for fish_tunes to load
+-- Handles late joiners in O(1) and detaches immediately to clear LuaJIT heap
 -- ============================================================
-local initHandler
-
-initHandler = AddEventHandler('fish_tunes:modulesLoaded', function()
+local function InitializeNormalizer()
     if isReady then return end
     isReady = true
-    print('[fish_normalizer] Modules loaded event intercepted. PI Normalizer initialized and active.')
+    print('[fish_normalizer] PI Normalizer initialized and active.')
     TriggerServerEvent('fish_normalizer:requestPerformanceData')
-    
-    -- Immediately detach anonymous event handler pointer to clean LuaJIT heap memory
-    if initHandler then
-        RemoveEventHandler(initHandler)
-        initHandler = nil
-    end
-end)
+end
 
--- Fallback check in case fish_normalizer is restarted in-game
 Citizen.CreateThread(function()
-    Citizen.Wait(1000)
-    if not isReady and GetResourceState('fish_tunes') == 'started' then
-        Citizen.Wait(1000)
-        if not isReady then
-            isReady = true
-            print('[fish_normalizer] Fallback ready state triggered on resource restart.')
-            TriggerServerEvent('fish_normalizer:requestPerformanceData')
-            
-            -- Clean up event handler if triggered by fallback
+    -- Late Joiner Check: If server is already ready, initialize immediately
+    if GlobalState.fish_tunes_ready then
+        InitializeNormalizer()
+        return
+    end
+
+    -- Early Joiner / Restart Fallback: Listen for dynamic state bag replication
+    local initHandler
+    initHandler = AddStateBagChangeHandler('fish_tunes_ready', 'global', function(bagName, key, value, _, replicated)
+        if value then
+            InitializeNormalizer()
             if initHandler then
-                RemoveEventHandler(initHandler)
+                RemoveStateBagChangeHandler(initHandler)
                 initHandler = nil
             end
         end
-    end
+    end)
 end)
 
 -- ============================================================

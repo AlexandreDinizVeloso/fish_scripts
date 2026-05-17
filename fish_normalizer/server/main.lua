@@ -218,16 +218,18 @@ function PushVehicleState(netId, data, remapData, tuneData)
     -- Do NOT overwrite data.score in the cache
     local displayScore = CalculateDisplayScore(dbScore, tunePI, remapPI)
     local displayRank = GetRankFromScore(displayScore)
-
-    -- Push state bag
-    entityState:set('fish:score',     displayScore,    true)
-    entityState:set('fish:rank',      displayRank,     true)
-    entityState:set('fish:archetype', archetype,       true)
-    entityState:set('fish:handling',  handlingProfile, true)
-    entityState:set('fish:heat',      (tuneData and tuneData.heat) or 0, true)
-    
     local drivetrain = (tuneData and tuneData.drivetrain) or 'FWD'
-    entityState:set('fish_drivetrain', drivetrain, true)
+
+    -- Transactional Physics Matrix: aggregate all state parameters into a single O(1) MsgPack payload
+    local physicsMatrix = {
+        score = displayScore,
+        rank = displayRank,
+        archetype = archetype,
+        handling = handlingProfile,
+        heat = (tuneData and tuneData.heat) or 0,
+        drivetrain = drivetrain
+    }
+    entityState:set('fish_physics_matrix', physicsMatrix, true)
 
     -- FIX: Do NOT overwrite data.score or data.rank in the cache.
     -- The authoritative normalization score must be preserved.

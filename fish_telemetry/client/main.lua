@@ -98,7 +98,8 @@ local function GetCurrentVehicleSignature()
         archetype = exports['fish_normalizer']:GetVehicleArchetype(veh) or 'stock'
     end)
     
-    local heat = Entity(veh).state['fish:heat'] or 0
+    local matrix = Entity(veh).state['fish_physics_matrix']
+    local heat = (matrix and matrix.heat) or 0
     
     return {
         plate     = plate,

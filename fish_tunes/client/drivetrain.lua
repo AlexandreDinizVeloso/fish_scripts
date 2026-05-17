@@ -93,11 +93,11 @@ exports('ForceHandlingRefresh', ForceHandlingRefresh)
 
 -- ============================================================
 -- OneSync State Bag Observer Pattern: Drivetrain Synchronization
--- Reacts instantly to 'fish_drivetrain' state bag changes
+-- Reacts instantly to 'fish_physics_matrix' state bag changes
 -- Blocks physical calculations if local client does not own entity
 -- ============================================================
-AddStateBagChangeHandler('fish_drivetrain', nil, function(bagName, key, value, _, replicated)
-    if not value then return end
+AddStateBagChangeHandler('fish_physics_matrix', nil, function(bagName, key, value, _, replicated)
+    if not value or not value.drivetrain then return end
     
     local entity = GetEntityFromStateBagName(bagName)
     if not DoesEntityExist(entity) or GetEntityType(entity) ~= 2 then return end
@@ -105,18 +105,19 @@ AddStateBagChangeHandler('fish_drivetrain', nil, function(bagName, key, value, _
     -- Architectural boundary: Only modify physics if local client has network authority
     if NetworkHasControlOfEntity(entity) then
         local plate = GetVehicleNumberPlateText(entity):gsub('%s+', '')
+        local drivetrain = value.drivetrain
         
         -- Update client tunes cache if GetRawTunesData is globally exposed
         if GetRawTunesData then
             local tData = GetRawTunesData()
             if tData then
                 if not tData[plate] then tData[plate] = {} end
-                tData[plate].drivetrain = value
+                tData[plate].drivetrain = drivetrain
             end
         end
         
         -- Apply drive layout configuration physically
-        ApplyDrivetrainModifiers(entity, value)
+        ApplyDrivetrainModifiers(entity, drivetrain)
         
         -- Force Bullet vector physics recalculation for the local mesh
         ModifyVehicleTopSpeed(entity, 1.0)
@@ -126,6 +127,6 @@ AddStateBagChangeHandler('fish_drivetrain', nil, function(bagName, key, value, _
             exports.fish_normalizer:ClearDrivetrainCache(plate)
         end
         
-        TriggerEvent('fish_tunes:performanceUpdated', plate, { drivetrain = value })
+        TriggerEvent('fish_tunes:performanceUpdated', plate, { drivetrain = drivetrain })
     end
 end)

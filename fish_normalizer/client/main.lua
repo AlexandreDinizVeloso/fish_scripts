@@ -156,9 +156,10 @@ function GetVehicleRank(vehicle)
     local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
 
     -- Try state bag first (server-authoritative)
-    local bagScore = Entity(vehicle).state['fish:score']
-    local bagRank = Entity(vehicle).state['fish:rank']
-    local bagArchetype = Entity(vehicle).state['fish:archetype']
+    local matrix = Entity(vehicle).state['fish_physics_matrix']
+    local bagScore = matrix and matrix.score
+    local bagRank = matrix and matrix.rank
+    local bagArchetype = matrix and matrix.archetype
 
     if bagScore and bagScore > 0 then
         local rankObj = nil
@@ -231,7 +232,8 @@ end
 
 -- Export: Get vehicle score
 function GetVehicleScore(vehicle)
-    local bagScore = Entity(vehicle).state['fish:score']
+    local matrix = Entity(vehicle).state['fish_physics_matrix']
+    local bagScore = matrix and matrix.score
     if bagScore and bagScore > 0 then return bagScore end
     local result = GetVehicleRank(vehicle)
     if result then return result.score end
@@ -456,8 +458,9 @@ Citizen.CreateThread(function()
                         local rankColor    = '#8B8B8B'
 
                         -- Read state bag (server-authoritative)
-                        local bagScore = Entity(veh).state['fish:score']
-                        local bagRank  = Entity(veh).state['fish:rank']
+                        local matrix = Entity(veh).state['fish_physics_matrix']
+                        local bagScore = matrix and matrix.score
+                        local bagRank  = matrix and matrix.rank
 
                         if bagScore and bagScore > 0 and bagRank then
                             displayScore = bagScore
