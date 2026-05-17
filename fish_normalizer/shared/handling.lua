@@ -17,9 +17,9 @@ HandlingEngine = {}
 -- matching the hand-tuned examples in Tuning_Examples/
 -- Reference targets at PI 500 (mid-range):
 --   Esportivo: Pentro-like (MaxFlatVel~162, DriveForce~0.31, TractionMax~1.80)
---   Supercarro: balanced high performer
---   Possante: high accel, low handling
---   Exotico: top speed focused
+--   Supercarro: NeroPS-like (MaxFlatVel~182, DriveForce~0.50, TractionMax~1.70)
+--   Possante: high accel, low handling (MaxFlatVel~109, DriveForce~0.45)
+--   Exotico: top speed focused (MaxFlatVel~130, Low drag~4.55)
 local BASE_HANDLING = {
     -- Drive
     fInitialDriveMaxFlatVel        = 115.0,  -- Calibrated base flatvel to target exact class speeds (B: ~190, A L3: ~200, A L5 avg: ~208, A L5 top: ~215)
@@ -66,9 +66,15 @@ local BASE_HANDLING = {
 
 local ARCHETYPE_PROFILES = {
     esportivo = {
-        -- High cornering, lightweight, limited top speed
+        -- High cornering, lightweight, good top speed
         -- Targets: MaxFlatVel~162, DriveForce~0.31, TractionMax~1.80, SuspForce~3.0 (Pentro)
-        fInitialDriveMaxFlatVel        = 1.08,  -- 150*1.08 = 162 ✓ (Pentro)
+        -- Class A target: 205-215 km/h avg; differences vs other archetypes:
+        --   + Best cornering grip (traction + lateral)
+        --   + Lightest mass → better acceleration/deceleration
+        --   + Lowest drag penalty per grip point
+        --   - Lower raw top speed than supercarro
+        --   - Lower brute force than possante
+        fInitialDriveMaxFlatVel        = 1.41,  -- 115*1.41 = 162.15 ≈ 162 (Pentro/Sunrise target)
         fInitialDriveForce             = 1.03,  -- 0.30*1.03 = 0.309 ≈ 0.31 ✓
         fDriveInertia                  = 1.10,
         fTractionCurveMax              = 1.06,  -- 1.70*1.06 = 1.80 ✓
@@ -102,7 +108,14 @@ local ARCHETYPE_PROFILES = {
     possante = {
         -- Brutal acceleration, heavy, poor cornering
         -- Targets: DriveForce~0.45, Mass~2100, TractionMax~1.50
-        fInitialDriveMaxFlatVel        = 0.95,
+        -- Differences vs other archetypes:
+        --   + Highest engine force per mass → best raw acceleration
+        --   + Toughest body (lowest damage multipliers)
+        --   + High torque for launches
+        --   - Heaviest class → worst braking distance
+        --   - Highest drag → top speed limited
+        --   - Lowest traction → poor cornering
+        fInitialDriveMaxFlatVel        = 0.95,  -- 115*0.95 = 109.25 (matches telemetry)
         fInitialDriveForce             = 1.50,  -- 0.30*1.50 = 0.45
         fDriveInertia                  = 0.85,
         fTractionCurveMax              = 0.88,  -- 1.70*0.88 = 1.50
@@ -122,8 +135,8 @@ local ARCHETYPE_PROFILES = {
         fHandBrakeForce                = 0.70,
         fBrakeForce                    = 0.85,
         fBrakeBiasFront                = 0.52,
-        fMass                          = 1.40,  -- target 2100
-        fInitialDragCoeff              = 1.20,
+        fMass                          = 1.40,  -- 1500*1.40 = 2100
+        fInitialDragCoeff              = 1.20,  -- 7.0*1.20 = 8.40 (matches telemetry)
         fDownForceModifier             = 0.80,
         fClutchChangeRateScaleUpShift  = 0.85,
         fClutchChangeRateScaleDownShift = 0.80,
@@ -132,9 +145,16 @@ local ARCHETYPE_PROFILES = {
         fEngineDamageMult              = 1.13,
     },
     exotico = {
-        -- Top speed king, stable acceleration
-        -- Targets: MaxFlatVel~170, Low drag~4.5, DriveForce~0.35
-        fInitialDriveMaxFlatVel        = 1.13,  -- 150*1.13 = 170
+        -- Aerodynamic king, stable top speed through low drag
+        -- Targets: MaxFlatVel~130, Low drag~4.5, DriveForce~0.40
+        -- Differences vs other archetypes:
+        --   + Lowest drag coefficient → best aero efficiency
+        --   + Stable high-speed behavior
+        --   + Moderate mass → decent handling
+        --   - Lower raw FlatVel than supercarro
+        --   - Lower traction than esportivo
+        --   - Fragile (high damage multipliers)
+        fInitialDriveMaxFlatVel        = 1.13,  -- 115*1.13 = 129.95 ≈ 130
         fInitialDriveForce             = 1.10,  -- 0.30*1.10 = 0.33
         fDriveInertia                  = 0.95,
         fTractionCurveMax              = 1.00,
@@ -155,7 +175,7 @@ local ARCHETYPE_PROFILES = {
         fBrakeForce                    = 1.00,
         fBrakeBiasFront                = 0.50,
         fMass                          = 0.95,
-        fInitialDragCoeff              = 0.65,  -- very low drag
+        fInitialDragCoeff              = 0.65,  -- very low drag (telemetry: 4.55)
         fDownForceModifier             = 1.05,
         fClutchChangeRateScaleUpShift  = 1.15,
         fClutchChangeRateScaleDownShift = 1.10,
@@ -166,8 +186,15 @@ local ARCHETYPE_PROFILES = {
     supercarro = {
         -- Balanced excellence, high everything
         -- Targets (NeroPS at S-TOP): MaxFlatVel~182, DriveForce~0.50, TractionMax~1.70, Mass~1800
-        fInitialDriveMaxFlatVel        = 1.15,  -- 150*1.15 = 172.5 (base), scaled by PI perf for higher
-        fInitialDriveForce             = 1.30,  -- 0.30*1.30 = 0.39 (base), scaled by PI perf
+        -- Class S target: 220-235 km/h avg; differences vs other archetypes:
+        --   + Highest raw top speed (FlatVel king)
+        --   + Strongest engine force → best straight-line acceleration
+        --   + Best braking power
+        --   + Balanced traction (not best at cornering, not worst)
+        --   - Heavier than esportivo → slower turn-in
+        --   - Higher drag than exotico
+        fInitialDriveMaxFlatVel        = 1.58,  -- 115*1.58 = 181.7 ≈ 182 (NeroPS target)
+        fInitialDriveForce             = 1.67,  -- 0.30*1.67 = 0.501 ≈ 0.50 (NeroPS target)
         fDriveInertia                  = 1.05,
         fTractionCurveMax              = 1.00,  -- 1.70*1.00 = 1.70 (NeroPS)
         fTractionCurveMin              = 1.00,  -- 1.50*1.00 = 1.50
@@ -186,9 +213,9 @@ local ARCHETYPE_PROFILES = {
         fRollCentreHeightFront         = 1.50,  -- target 0.30 (between NeroPS 0.40 and Pentro 0.30)
         fRollCentreHeightRear          = 1.50,
         fHandBrakeForce                = 1.08,  -- target 0.7 (NeroPS)
-        fBrakeForce                    = 1.60,  -- target 0.80 (base prior to PI scaling that pushes to ~1.0)
+        fBrakeForce                    = 2.00,  -- 0.50*2.00 = 1.00 (NeroPS target)
         fBrakeBiasFront                = 0.60,  -- direct value
-        fMass                          = 1.10,  -- target 1650-1800
+        fMass                          = 1.20,  -- 1500*1.20 = 1800 (NeroPS target)
         fInitialDragCoeff              = 0.93,  -- target 6.5 (NeroPS)
         fDownForceModifier             = 1.20,
         fClutchChangeRateScaleUpShift  = 1.50,  -- target 3.0 (NeroPS)
@@ -387,53 +414,69 @@ local SUBARCHETYPE_TWEAKS = {
 local ARCHETYPE_REFERENCE = {
     esportivo = {
         -- Esportivo: cornering-focused, moderate top speed
-        maxFlatVel_ref       = {min = 15, max = 22},   -- flatVel/sqrt(drag): ~162/sqrt(6.7)≈62.6 normalised range
-        driveForce_ref       = {min = 0.00015, max = 0.00035},  -- (force/mass)*gears
+        -- Effective speed range: 115*1.41*PI_mult / sqrt(7*0.96) → ~53-72
+        maxFlatVel_ref       = {min = 50, max = 75},
+        -- Force-to-mass: (0.30*1.03*PI_mult / mass*1500*0.90) * 6 gears → ~0.0012-0.0016
+        driveForce_ref       = {min = 0.0010, max = 0.0017},
         tractionCurveMax_ref = {min = 1.40, max = 2.50},
         brakeForce_ref       = {min = 0.30, max = 0.70},
         mass_ref             = {min = 2000, max = 1200, inverted = true},
     },
     possante = {
         -- Possante: acceleration-focused, heavy
-        maxFlatVel_ref       = {min = 14, max = 20},
-        driveForce_ref       = {min = 0.00020, max = 0.00045},
+        -- Effective speed: 115*0.95 / sqrt(7*1.20) → ~32-43
+        maxFlatVel_ref       = {min = 30, max = 45},
+        -- Force-to-mass: (0.30*1.50 / 1500*1.40) * 6 → ~0.0011-0.0015
+        driveForce_ref       = {min = 0.0010, max = 0.0015},
         tractionCurveMax_ref = {min = 1.30, max = 2.00},
         brakeForce_ref       = {min = 0.30, max = 0.60},
         mass_ref             = {min = 1800, max = 1000, inverted = true},
     },
     exotico = {
         -- Exotico: top speed king, low drag
-        maxFlatVel_ref       = {min = 18, max = 28},
-        driveForce_ref       = {min = 0.00018, max = 0.00040},
+        -- Effective speed: 115*1.13 / sqrt(7*0.65) → ~52-70
+        maxFlatVel_ref       = {min = 48, max = 72},
+        -- Force-to-mass: (0.30*1.10 / 1500*0.95) * 6 → ~0.0012-0.0016
+        driveForce_ref       = {min = 0.0011, max = 0.0017},
         tractionCurveMax_ref = {min = 1.40, max = 2.30},
         brakeForce_ref       = {min = 0.30, max = 0.65},
         mass_ref             = {min = 2000, max = 1200, inverted = true},
     },
     supercarro = {
         -- Supercarro: balanced, high all-round
-        maxFlatVel_ref       = {min = 17, max = 26},
-        driveForce_ref       = {min = 0.00020, max = 0.00042},
+        -- Effective speed: 115*1.58 / sqrt(7*0.93) → ~61-82
+        maxFlatVel_ref       = {min = 55, max = 85},
+        -- Force-to-mass: (0.30*1.67 / 1500*1.20) * 6 → ~0.0014-0.0019
+        driveForce_ref       = {min = 0.0013, max = 0.0020},
         tractionCurveMax_ref = {min = 1.40, max = 2.50},
         brakeForce_ref       = {min = 0.40, max = 1.00},
         mass_ref             = {min = 2000, max = 1200, inverted = true},
     },
     moto = {
-        maxFlatVel_ref       = {min = 16, max = 24},
-        driveForce_ref       = {min = 0.00050, max = 0.00120},
+        -- Ultra-light, agile, fragile
+        -- Effective speed: 115*0.95 / sqrt(7*0.50) → ~42-57
+        maxFlatVel_ref       = {min = 38, max = 60},
+        -- Force-to-mass: (0.30*1.10 / 1500*0.35) * 6 → ~0.0038-0.0051
+        driveForce_ref       = {min = 0.0035, max = 0.0055},
         tractionCurveMax_ref = {min = 1.50, max = 2.60},
         brakeForce_ref       = {min = 0.30, max = 0.60},
         mass_ref             = {min = 600, max = 300, inverted = true},
     },
     utilitario = {
-        maxFlatVel_ref       = {min = 8, max = 16},
-        driveForce_ref       = {min = 0.00010, max = 0.00025},
+        -- Slow, heavy, high torque
+        -- Effective speed: 115*0.55 / sqrt(7*1.50) → ~17-31
+        maxFlatVel_ref       = {min = 15, max = 35},
+        -- Force-to-mass: (0.30*0.65 / 1500*2.20) * 6 → ~0.00036-0.00053
+        driveForce_ref       = {min = 0.00030, max = 0.00060},
         tractionCurveMax_ref = {min = 1.20, max = 2.00},
         brakeForce_ref       = {min = 0.25, max = 0.50},
         mass_ref             = {min = 2500, max = 1500, inverted = true},
     },
     especial = {
-        maxFlatVel_ref       = {min = 14, max = 22},
-        driveForce_ref       = {min = 0.00015, max = 0.00035},
+        -- Effective speed: 115*1.00 / sqrt(7*1.00) → ~38-52
+        maxFlatVel_ref       = {min = 35, max = 55},
+        -- Force-to-mass: (0.30*1.00 / 1500*1.00) * 6 → ~0.0012
+        driveForce_ref       = {min = 0.0010, max = 0.0015},
         tractionCurveMax_ref = {min = 1.30, max = 2.10},
         brakeForce_ref       = {min = 0.30, max = 0.60},
         mass_ref             = {min = 2000, max = 1000, inverted = true},
