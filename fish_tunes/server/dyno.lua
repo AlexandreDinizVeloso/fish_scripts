@@ -4,6 +4,17 @@
 DynoTuning = {}
 local Config = {}
 
+-- OTIMIZAÇÃO: Pointer/Local Function Inlining
+local m_max = math.max
+local m_min = math.min
+local m_abs = math.abs
+
+-- OTIMIZAÇÃO: Função Clamp Baseada em Lógica Ternária para a ALU
+-- Reduz branch prediction misses vs math.max + math.min sequencial
+local function clamp(val, min, max)
+    return val < min and min or (val > max and max or val)
+end
+
 -- Initialize dyno module
 function DynoTuning.Init(config)
     Config = config
@@ -78,7 +89,7 @@ function DynoTuning.SetAFR(vehicleData, afr)
     end
     
     -- Clamp to safe range
-    afr = math.max(11.0, math.min(15.0, afr))
+    afr = clamp(afr, 11.0, 15.0)
     vehicleData.dyno.afr = afr
     vehicleData.dyno.last_tuned = os.time()
     
@@ -92,8 +103,7 @@ function DynoTuning.SetIgnitionTiming(vehicleData, timing)
     end
     
     -- Clamp to range
-    timing = math.max(Config.DynoTuning.ignition_timing_range.min, 
-                      math.min(Config.DynoTuning.ignition_timing_range.max, timing))
+    timing = clamp(timing, Config.DynoTuning.ignition_timing_range.min, Config.DynoTuning.ignition_timing_range.max)
     
     vehicleData.dyno.ignition_timing = timing
     vehicleData.dyno.last_tuned = os.time()
@@ -108,8 +118,7 @@ function DynoTuning.SetFuelTable(vehicleData, fuelTable)
     end
     
     -- Clamp to range
-    fuelTable = math.max(Config.DynoTuning.fuel_table_range.min,
-                         math.min(Config.DynoTuning.fuel_table_range.max, fuelTable))
+    fuelTable = clamp(fuelTable, Config.DynoTuning.fuel_table_range.min, Config.DynoTuning.fuel_table_range.max)
     
     vehicleData.dyno.fuel_table = fuelTable
     vehicleData.dyno.last_tuned = os.time()
@@ -124,8 +133,7 @@ function DynoTuning.SetFinalDrive(vehicleData, ratio)
     end
     
     -- Clamp to range
-    ratio = math.max(Config.DynoTuning.final_drive_range.min,
-                     math.min(Config.DynoTuning.final_drive_range.max, ratio))
+    ratio = clamp(ratio, Config.DynoTuning.final_drive_range.min, Config.DynoTuning.final_drive_range.max)
     
     vehicleData.dyno.final_drive = ratio
     vehicleData.dyno.last_tuned = os.time()
@@ -140,8 +148,7 @@ function DynoTuning.SetBoostPressure(vehicleData, psi)
     end
     
     -- Clamp to range
-    psi = math.max(Config.DynoTuning.boost_pressure_range.min,
-                   math.min(Config.DynoTuning.boost_pressure_range.max, psi))
+    psi = clamp(psi, Config.DynoTuning.boost_pressure_range.min, Config.DynoTuning.boost_pressure_range.max)
     
     vehicleData.dyno.boost_pressure = psi
     vehicleData.dyno.last_tuned = os.time()
@@ -181,7 +188,7 @@ function DynoTuning.CalculateEngineTemperature(vehicleData, rpm, load)
     end
     
     -- Clamp temperature
-    baseTemp = math.max(70, math.min(150, baseTemp))
+    baseTemp = clamp(baseTemp, 70, 150)
     
     vehicleData.dyno.engine_temp = math.floor(baseTemp)
     
@@ -236,7 +243,7 @@ function DynoTuning.CalculatePowerOutput(vehicleData, basePower)
     end
     
     -- Clamp multiplier
-    multiplier = math.max(0.5, math.min(1.8, multiplier))
+    multiplier = clamp(multiplier, 0.5, 1.8)
     
     local powerOutput = basePower * multiplier
     vehicleData.dyno.power_output = math.floor(powerOutput)
@@ -270,7 +277,7 @@ function DynoTuning.CalculateTorqueOutput(vehicleData, baseTorque)
         multiplier = multiplier + (dyno.boost_pressure / 30) * 0.5
     end
     
-    multiplier = math.max(0.6, math.min(1.9, multiplier))
+    multiplier = clamp(multiplier, 0.6, 1.9)
     
     local torqueOutput = baseTorque * multiplier
     vehicleData.dyno.torque_output = math.floor(torqueOutput)
@@ -357,11 +364,11 @@ function DynoTuning.GetTuningQuality(vehicleData)
     end
     
     -- Extreme ignition timing reduces quality
-    if math.abs(dyno.ignition_timing) > 5 then
+    if m_abs(dyno.ignition_timing) > 5 then
         quality = quality - 5
     end
     
-    return math.max(0, math.min(100, quality))
+    return clamp(quality, 0, 100)
 end
 
 -- Get tuning efficiency (0-1, multiplier for wear rates)

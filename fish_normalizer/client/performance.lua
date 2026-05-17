@@ -1,22 +1,45 @@
 --[[
-    FISH Normalizer - Performance Application
-    Applies remap and tune bonuses to vehicles
+    FISH Normalizer - Performance Application (Refatorado O(1))
     
-    Architecture: Other resources PUSH data via events.
-    This file accumulates all modifiers and applies them as a single combined operation.
+    Mudanças:
+    - Polling loop removido → Event-Driven via gameEventTriggered
+    - plateCache por ID de entidade → O(1) lookup, 1 alocação/veículo
+    - appliedValues como single source of truth → delta checking sem ler natives
+    - entityRemoved handler → desalocação determinística de memória
+    - Zero alocações de string no game thread
 ]]
 
--- Per-plate caches
+-- ==========================================================
+-- ALOCAÇÃO DE ESTADO LOCAL (Heap Controlado)
+-- ==========================================================
 local originalHandlingCache = {}    -- Original base handling values (cleared on reapply)
 local originalSuspensionCache = {}  -- Persistent authentic suspension values (never cleared)
 local remapData = {}                -- Remap data pushed from fish_remaps
 local tuneData = {}                 -- Tune data pushed from fish_tunes
 local appliedPlates = {}            -- Track which plates have been applied this session
+local appliedValues = {}            -- Últimos valores escritos via native (Single Source of Truth)
+local plateCache = {}               -- Entity-indexed plate cache O(1)
 local isReady = false               -- Pub-Sub Ready State Flag
 
--- ============================================================
+local m_abs = math.abs
+
+-- ==========================================================
+-- GERENCIADOR DE CACHE DE PLACA (Entity-Indexed O(1))
+-- ==========================================================
+local function GetVehiclePlate(vehicle)
+    if not vehicle or vehicle == 0 then return nil end
+    
+    if not plateCache[vehicle] then
+        -- string.gsub é alocado apenas UMA VEZ por veículo
+        plateCache[vehicle] = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+    end
+    
+    return plateCache[vehicle]
+end
+
+-- ==========================================================
 -- Data Push Event Handlers
--- ============================================================
+-- ==========================================================
 
 -- Listen for remap updates from fish_remaps
 RegisterNetEvent('fish_remaps:performanceUpdated')
@@ -29,7 +52,7 @@ AddEventHandler('fish_remaps:performanceUpdated', function(plate, data)
     if IsPedInAnyVehicle(ped, false) then
         local vehicle = GetVehiclePedIsIn(ped, false)
         if vehicle ~= 0 and DoesEntityExist(vehicle) then
-            local currentPlate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+            local currentPlate = GetVehiclePlate(vehicle)
             if currentPlate == plate then
                 ApplyPerformanceModifications(vehicle)
             end
@@ -48,7 +71,7 @@ AddEventHandler('fish_tunes:performanceUpdated', function(plate, data)
     if IsPedInAnyVehicle(ped, false) then
         local vehicle = GetVehiclePedIsIn(ped, false)
         if vehicle ~= 0 and DoesEntityExist(vehicle) then
-            local currentPlate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+            local currentPlate = GetVehiclePlate(vehicle)
             if currentPlate == plate then
                 ApplyPerformanceModifications(vehicle)
             end
@@ -60,16 +83,17 @@ end)
 RegisterNetEvent('fish_normalizer:requestReapply')
 AddEventHandler('fish_normalizer:requestReapply', function(vehicle)
     if vehicle and DoesEntityExist(vehicle) then
-        local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+        local plate = GetVehiclePlate(vehicle)
         originalHandlingCache[plate] = nil  -- Reset cache to get fresh base values
         appliedPlates[plate] = nil
+        appliedValues[plate] = nil
         ApplyPerformanceModifications(vehicle)
     end
 end)
 
--- ============================================================
+-- ==========================================================
 -- Remap Multiplier Calculation
--- ============================================================
+-- ==========================================================
 
 local function GetRemapMultipliers(plate)
     local remap = remapData[plate]
@@ -93,9 +117,9 @@ local function GetRemapMultipliers(plate)
     }
 end
 
--- ============================================================
+-- ==========================================================
 -- Tune Bonus Calculation
--- ============================================================
+-- ==========================================================
 
 local function GetTuneMultipliers(plate)
     local tune = tuneData[plate]
@@ -148,9 +172,9 @@ local function GetTuneMultipliers(plate)
     return totalBonuses
 end
 
--- ============================================================
+-- ==========================================================
 -- Helper: Apply GTA V Native Modifications based on parts
--- ============================================================
+-- ==========================================================
 
 local function ApplyNativeMods(vehicle, parts)
     if not DoesEntityExist(vehicle) then return end
@@ -205,14 +229,34 @@ local function ApplyNativeMods(vehicle, parts)
     end
 end
 
--- ============================================================
+-- ==========================================================
+-- Delta Checking Helper (Bypass C++/Lua Boundary)
+-- ==========================================================
+-- Só chama SetVehicleHandlingFloat se o valor difere do cache local.
+-- Zero leituras de GetVehicleHandlingFloat em loop quente.
+local function SetHandlingFloatIfChanged(vehicle, handlingType, fieldName, newValue, plate)
+    local lastApplied = appliedValues[plate]
+    if not lastApplied then
+        lastApplied = {}
+        appliedValues[plate] = lastApplied
+    end
+    
+    local current = lastApplied[fieldName]
+    if current == nil or m_abs(current - newValue) > 0.001 then
+        SetVehicleHandlingFloat(vehicle, handlingType, fieldName, newValue)
+        lastApplied[fieldName] = newValue
+    end
+end
+
+-- ==========================================================
 -- Main Performance Application
--- ============================================================
+-- ==========================================================
 
 function ApplyPerformanceModifications(vehicle)
     if not DoesEntityExist(vehicle) then return end
     
-    local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+    local plate = GetVehiclePlate(vehicle)
+    if not plate then return end
     
     -- Request the server to push/restore the entity state bag on first encounter
     if not appliedPlates[plate] then
@@ -413,9 +457,9 @@ function ApplyPerformanceModifications(vehicle)
         finalSuspRaise = raiseOffset
     end
     
-    -- ============================================================
+    -- ==========================================================
     -- Layer 5: Native Upgrade Compensation
-    -- ============================================================
+    -- ==========================================================
     -- GTA V's native Engine, Turbo, and Transmission mods add massive hardcoded torque and speed scaling factors.
     -- We divide the XML values by these native boosts so that the final physical speed and acceleration exactly match our targets.
     local nativeSpeedComp = 1.0
@@ -460,19 +504,20 @@ function ApplyPerformanceModifications(vehicle)
     local compensatedAccelComp = 1.0 + (nativeAccelComp - 1.0) * 0.40
     finalAccel = finalAccel / compensatedAccelComp
     
-    -- Apply combined modifications to vehicle handling
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDriveMaxFlatVel", finalTopSpeed)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDriveForce", finalAccel)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fBrakeForce", finalBraking)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMax", finalTractionMax)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMin", finalTractionMin)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", finalDrag)
+    -- Aplica modificações com delta checking (Lua-side single source of truth)
+    -- Zero leituras GetVehicleHandlingFloat — comparamos contra cache appliedValues
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fInitialDriveMaxFlatVel", finalTopSpeed, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fInitialDriveForce", finalAccel, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fBrakeForce", finalBraking, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fTractionCurveMax", finalTractionMax, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fTractionCurveMin", finalTractionMin, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fInitialDragCoeff", finalDrag, plate)
     
-    -- Apply suspension upgrades
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fSuspensionForce", finalSuspForce)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fSuspensionCompDamp", finalSuspCompDamp)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fSuspensionReboundDamp", finalSuspReboundDamp)
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fSuspensionRaise", finalSuspRaise)
+    -- Aplica modificações de suspensão com delta checking
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fSuspensionForce", finalSuspForce, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fSuspensionCompDamp", finalSuspCompDamp, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fSuspensionReboundDamp", finalSuspReboundDamp, plate)
+    SetHandlingFloatIfChanged(vehicle, "CHandlingData", "fSuspensionRaise", finalSuspRaise, plate)
 
     -- Force handling changes to take effect (FiveM workaround)
     if GetResourceState('fish_tunes') == 'started' then
@@ -497,10 +542,10 @@ function ApplyPerformanceModifications(vehicle)
     appliedPlates[plate] = true
 end
 
--- ============================================================
+-- ==========================================================
 -- State Synchronization: Wait for fish_tunes to load
 -- Handles late joiners in O(1) and detaches immediately to clear LuaJIT heap
--- ============================================================
+-- ==========================================================
 local function InitializeNormalizer()
     if isReady then return end
     isReady = true
@@ -528,39 +573,68 @@ Citizen.CreateThread(function()
     end)
 end)
 
--- ============================================================
--- Vehicle Entry Detection Thread
--- ============================================================
+-- ==========================================================
+-- EVENT-DRIVEN VEHICLE ENTRY DETECTION (Substitui Polling Loop)
+-- ==========================================================
+-- Escuta CEventNetworkPlayerEnteredVehicle via gameEventTriggered
+-- Zero alocações no game thread — apenas reage a transições de estado
 
-Citizen.CreateThread(function()
-    local lastVehicle = nil
+AddEventHandler('gameEventTriggered', function(eventName, args)
+    if not isReady then return end
     
-    while true do
-        Citizen.Wait(500)
+    if eventName == 'CEventNetworkPlayerEnteredVehicle' then
+        local playerPed = args[1]  -- Ped do jogador que entrou
+        local vehicle = args[2]     -- Veículo alvo
         
-        if isReady then
-            local ped = PlayerPedId()
-            if IsPedInAnyVehicle(ped, false) then
-                local vehicle = GetVehiclePedIsIn(ped, false)
-                if vehicle ~= 0 and DoesEntityExist(vehicle) and GetPedInVehicleSeat(vehicle, -1) == ped then
-                    local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
-                    
-                    -- Apply on vehicle change OR if not yet applied
-                    if vehicle ~= lastVehicle or not appliedPlates[plate] then
-                        lastVehicle = vehicle
-                        ApplyPerformanceModifications(vehicle)
-                    end
+        -- Verifica se o jogador local é o que entrou
+        if playerPed == PlayerPedId() then
+            local plate = GetVehiclePlate(vehicle)
+            if plate then
+                -- Popula cache inicial de handling se ainda não existir
+                if not originalHandlingCache[plate] then
+                    originalHandlingCache[plate] = {
+                        fInitialDriveMaxFlatVel = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveMaxFlatVel'),
+                        fInitialDriveForce = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDriveForce'),
+                        fBrakeForce = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fBrakeForce'),
+                        fTractionCurveMax = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMax'),
+                        fTractionCurveMin = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fTractionCurveMin'),
+                        fInitialDragCoeff = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fInitialDragCoeff')
+                    }
                 end
-            else
-                lastVehicle = nil
+                
+                -- Aciona a avaliação (delta checking impede natives se não houver mudança)
+                ApplyPerformanceModifications(vehicle)
             end
         end
     end
 end)
 
--- ============================================================
+-- ==========================================================
+-- GERENCIAMENTO DE MEMÓRIA (Garbage Collection Manual)
+-- ==========================================================
+-- Escuta entityRemoved e desaloca todos os caches do veículo deletado
+-- Previne memory leak progressivo em sessões longas
+
+AddEventHandler('entityRemoved', function(entity)
+    -- Se a entidade não é veículo, ignoramos
+    if GetEntityType(entity) ~= 2 then return end
+    
+    -- Verifica se temos cache para esta entidade
+    if plateCache[entity] then
+        local plate = plateCache[entity]
+        
+        -- Desalocação determinística de todos os sub-caches
+        originalHandlingCache[plate] = nil
+        originalSuspensionCache[plate] = nil
+        appliedPlates[plate] = nil
+        appliedValues[plate] = nil
+        plateCache[entity] = nil
+    end
+end)
+
+-- ==========================================================
 -- Server Data Sync (receive saved data on connect)
--- ============================================================
+-- ==========================================================
 
 RegisterNetEvent('fish_normalizer:receivePerformanceData')
 AddEventHandler('fish_normalizer:receivePerformanceData', function(rData, tData)
@@ -585,7 +659,7 @@ AddEventHandler('fish_normalizer:receivePerformanceData', function(rData, tData)
     if IsPedInAnyVehicle(ped, false) then
         local vehicle = GetVehiclePedIsIn(ped, false)
         if vehicle ~= 0 and DoesEntityExist(vehicle) then
-            local plate = string.gsub(GetVehicleNumberPlateText(vehicle), '%s+', '')
+            local plate = GetVehiclePlate(vehicle)
             if syncPlates[plate] then
                 originalHandlingCache[plate] = nil  -- Clear base handling cache to read fresh state bag value
                 ApplyPerformanceModifications(vehicle)
