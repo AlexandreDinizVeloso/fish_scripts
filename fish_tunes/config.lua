@@ -88,9 +88,9 @@ Config.PartBonuses = {
     }
 }
 
-Config.MaxHeat = 100
+Config.MaxHeat = 200
 Config.HeatDecayRate = 0.5 -- per minute when not in vehicle
-Config.PoliceHeatThreshold = 40 -- heat level where police attention starts
+Config.PoliceHeatThreshold = 60 -- heat level where police attention starts
 Config.PoliceHeatMultiplier = 0.01 -- chance per heat point per check
 
 -- ============================================================
