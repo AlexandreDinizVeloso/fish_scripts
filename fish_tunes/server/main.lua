@@ -58,10 +58,10 @@ AddEventHandler('onResourceStart', function(resourceName)
         end
     end)
 
-    -- Thread de persistência periódica (Write-Behind Flush a cada 15 minutos)
+    -- Thread de persistência periódica (Write-Behind Flush a cada 3 minutos)
     Citizen.CreateThread(function()
         while true do
-            Citizen.Wait(900000) -- 15 minutos
+            Citizen.Wait(180000) -- 3 minutos
             FlushDirtyHeat()
         end
     end)
@@ -875,6 +875,23 @@ exports('AddHeat', AddHeat)
 
 exports('GetPartBonuses', function()
     return Config.PartBonuses
+end)
+
+-- ============================================================
+-- Shutdown Handlers: Garantem persistência síncrona dos dados
+-- antes de crash/restart do processo FXServer.exe
+-- ============================================================
+
+-- Intercepta sinal txAdmin de shutdown programado
+AddEventHandler('txAdmin:events:serverShuttingDown', function()
+    FlushDirtyHeat()
+end)
+
+-- Intercepta parada/restart do recurso para flush síncrono final
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName == GetCurrentResourceName() then
+        FlushDirtyHeat()
+    end
 end)
 
 -- Declare Global State Bag to signal all other resources that fish_tunes has loaded successfully

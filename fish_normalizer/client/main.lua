@@ -7,38 +7,8 @@ local isAdmin = false
 -- ============================================================
 -- Entity State Bag: Apply handling when server pushes update
 -- ============================================================
-local reconciliationQueue = {}
-
--- Fila de Reconciliação (Consumidor Único Não-Bloqueante) com TTL
-CreateThread(function()
-    while true do
-        for netId, entry in pairs(reconciliationQueue) do
-            if NetworkDoesEntityExistWithNetworkId(netId) then
-                local veh = NetworkGetEntityFromNetworkId(netId)
-                if DoesEntityExist(veh) then
-                    -- APLICAR METADADOS/HANDLING STATEBAG AQUI
-                    exports['fish_normalizer']:ApplyHandlingToVehicle(veh, entry.data)
-                    TriggerEvent('fish_normalizer:requestReapply', veh)
-                    reconciliationQueue[netId] = nil
-                else
-                    -- Entity exists in network scope but not yet in world physics
-                    entry.retries = entry.retries + 1
-                    if entry.retries > 20 then
-                        -- Dead-Letter descarte: 20 tentativas (10s) sem materialização
-                        reconciliationQueue[netId] = nil
-                    end
-                end
-            else
-                -- netId não existe mais na rede (ex: Routing Bucket transition)
-                entry.retries = entry.retries + 1
-                if entry.retries > 20 then
-                    reconciliationQueue[netId] = nil
-                end
-            end
-        end
-        Wait(500) -- Polling mitigado a cada 500ms para estabilidade de rede
-    end
-end)
+-- Reconciliação via interrupção do motor (Event-Driven): zero polling, zero fila.
+-- entityCreated dispara quando a entidade se materializa fisicamente no cliente.
 
 AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, replicated)
     if not value then return end
@@ -48,8 +18,20 @@ AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, 
     if DoesEntityExist(veh) then
         exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
         TriggerEvent('fish_normalizer:requestReapply', veh)
-    else
-        reconciliationQueue[netId] = { data = value, retries = 0 }
+    end
+    -- Se a entidade não existe fisicamente, o handler entityCreated capturará
+    -- quando ela se materializar — sem fila, sem polling, sem race condition.
+end)
+
+-- Interceptação de streaming físico O(1): acionada quando a entidade aparece no mundo
+AddEventHandler('entityCreated', function(entity)
+    if GetEntityType(entity) == 2 then -- O(1) Type Check: veículo
+        local stateBagProfile = Entity(entity).state['fish:handling']
+        if stateBagProfile then
+            -- O veículo acaba de materializar-se no cliente. Aplica-se o handling imediatamente.
+            exports['fish_normalizer']:ApplyHandlingToVehicle(entity, stateBagProfile)
+            TriggerEvent('fish_normalizer:requestReapply', entity)
+        end
     end
 end)
 
@@ -475,7 +457,7 @@ local activeCache = bufferA
 local backBuffer = bufferB
 
 -- Time-Slicing: processa CHUNK_SIZE veículos por frame para achatar picos de CPU
-local CHUNK_SIZE = 100
+local CHUNK_SIZE = 20
 local poolIndex = 1
 local scanInProgress = false
 
