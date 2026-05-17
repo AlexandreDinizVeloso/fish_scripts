@@ -82,11 +82,9 @@ local function GetPlayerName_Safe(src)
     return GetPlayerName(src) or 'Unknown'
 end
 
--- Build private DM channel key (always sorted alphabetically for consistency)
+-- Build private DM channel key (O(1) lexical ternary, elimina table.sort O(N log N))
 local function DMChannel(identA, identB)
-    local ids = {identA, identB}
-    table.sort(ids)
-    return 'dm:' .. ids[1] .. ':' .. ids[2]
+    return identA < identB and ("dm:" .. identA .. ":" .. identB) or ("dm:" .. identB .. ":" .. identA)
 end
 
 -- ============================================================

@@ -7,26 +7,37 @@ local isAdmin = false
 -- ============================================================
 -- Entity State Bag: Apply handling when server pushes update
 -- ============================================================
+local reconciliationQueue = {}
+
+-- Fila de Reconciliação (Consumidor Único Não-Bloqueante)
+CreateThread(function()
+    while true do
+        for netId, value in pairs(reconciliationQueue) do
+            if NetworkDoesEntityExistWithNetworkId(netId) then
+                local veh = NetworkGetEntityFromNetworkId(netId)
+                if DoesEntityExist(veh) then
+                    -- APLICAR METADADOS/HANDLING STATEBAG AQUI
+                    exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+                    TriggerEvent('fish_normalizer:requestReapply', veh)
+                    reconciliationQueue[netId] = nil
+                end
+            end
+        end
+        Wait(500) -- Polling mitigado a cada 500ms para estabilidade de rede
+    end
+end)
+
 AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, replicated)
     if not value then return end
     local netId = tonumber(bagName:gsub('entity:', ''), 10)
     if not netId then return end
     local veh = NetworkGetEntityFromNetworkId(netId)
-    Citizen.CreateThread(function()
-        local attempts = 0
-        while not DoesEntityExist(veh) and attempts < 20 do
-            Citizen.Wait(100)
-            veh = NetworkGetEntityFromNetworkId(netId)
-            attempts = attempts + 1
-        end
-        if DoesEntityExist(veh) then
-            -- Use the shared ApplyHandlingToVehicle export
-            exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
-            
-            -- Reapply performance modifications with the new base profile handling values
-            TriggerEvent('fish_normalizer:requestReapply', veh)
-        end
-    end)
+    if DoesEntityExist(veh) then
+        exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+        TriggerEvent('fish_normalizer:requestReapply', veh)
+    else
+        reconciliationQueue[netId] = value
+    end
 end)
 
 -- Update local cache when server pushes score
@@ -440,19 +451,27 @@ end
 -- ============================================================
 -- Hold K: Show nearby vehicle ratings (reads state bag)
 -- ============================================================
-Citizen.CreateThread(function()
-    while true do
-        if IsControlPressed(0, 311) then -- K key
-            Citizen.Wait(0)
-            local ped    = PlayerPedId()
-            local pos    = GetEntityCoords(ped)
-            local vehicles = GetGamePool('CVehicle')
+local cachedVehicles = {}
 
-            for _, veh in ipairs(vehicles) do
+-- Spatial Partitioning Updater (Execução a 1 Hz / 1000ms)
+CreateThread(function()
+    while true do
+        local playerPed = PlayerPedId()
+        if DoesEntityExist(playerPed) then
+            local pos = GetEntityCoords(playerPed)
+            local pool = GetGamePool('CVehicle')
+            local tempCache = {}
+
+            for i = 1, #pool do
+                local veh = pool[i]
                 if DoesEntityExist(veh) then
                     local vehPos = GetEntityCoords(veh)
-                    local dist   = #(pos - vehPos)
-                    if dist < 40.0 then
+                    
+                    -- Cálculo de distância ao quadrado (evita overhead de FPU da raiz quadrada)
+                    local distSq = (pos.x - vehPos.x)^2 + (pos.y - vehPos.y)^2 + (pos.z - vehPos.z)^2
+                    
+                    -- 2500.0 equivale a 50.0 metros de raio ao quadrado
+                    if distSq <= 2500.0 then
                         local displayScore = nil
                         local displayRank  = nil
                         local rankColor    = '#8B8B8B'
@@ -479,29 +498,54 @@ Citizen.CreateThread(function()
                         end
 
                         if displayScore and displayRank then
-                            local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
-                            if onScreen then
-                                local cr = tonumber(rankColor:sub(2,3), 16) or 139
-                                local cg = tonumber(rankColor:sub(4,5), 16) or 139
-                                local cb = tonumber(rankColor:sub(6,7), 16) or 139
-                                SetTextScale(0.38, 0.38)
-                                SetTextFont(4)
-                                SetTextProportional(true)
-                                SetTextColour(cr, cg, cb, 255)
-                                SetTextDropshadow(2, 0, 0, 0, 200)
-                                SetTextEdge(1, 0, 0, 0, 140)
-                                SetTextDropShadow()
-                                SetTextOutline()
-                                SetTextEntry('STRING')
-                                AddTextComponentString(displayRank .. ': ' .. displayScore)
-                                DrawText(screenX, screenY)
-                            end
+                            local cr = tonumber(rankColor:sub(2,3), 16) or 139
+                            local cg = tonumber(rankColor:sub(4,5), 16) or 139
+                            local cb = tonumber(rankColor:sub(6,7), 16) or 139
+                            tempCache[#tempCache + 1] = {
+                                entity = veh,
+                                score = displayScore,
+                                rank = displayRank,
+                                color = {cr, cg, cb}
+                            }
                         end
                     end
                 end
             end
+            
+            cachedVehicles = tempCache
+        end
+        Wait(1000)
+    end
+end)
+
+-- Render Thread (Tick: O(K) onde K = tamanho de cachedVehicles)
+CreateThread(function()
+    while true do
+        if IsControlPressed(0, 311) then -- Tecla K
+            for i = 1, #cachedVehicles do
+                local data = cachedVehicles[i]
+                local veh = data.entity
+                if DoesEntityExist(veh) then
+                    local vehPos = GetEntityCoords(veh)
+                    local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
+                    if onScreen then
+                        SetTextScale(0.38, 0.38)
+                        SetTextFont(4)
+                        SetTextProportional(true)
+                        SetTextColour(data.color[1], data.color[2], data.color[3], 255)
+                        SetTextDropshadow(2, 0, 0, 0, 200)
+                        SetTextEdge(1, 0, 0, 0, 140)
+                        SetTextDropShadow()
+                        SetTextOutline()
+                        SetTextEntry('STRING')
+                        AddTextComponentString(data.rank .. ': ' .. data.score)
+                        DrawText(screenX, screenY)
+                    end
+                end
+            end
+            Wait(0)
         else
-            Citizen.Wait(200)
+            Wait(200)
         end
     end
 end)

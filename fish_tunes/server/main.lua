@@ -5,6 +5,7 @@
 -- ============================================================
 
 local heatCache = {}  -- { [plate] = { heat=0, lastDecay=0 } }
+local dirtyPlates = {}  -- { [plate] = true } for write-behind persistence
 
 -- ============================================================
 -- DB wrappers (use fish_normalizer exports for cross-resource access)
@@ -49,18 +50,63 @@ AddEventHandler('onResourceStart', function(resourceName)
 
     print('[fish_tunes] Started. HEAT system active.')
 
-    -- Start HEAT decay timer
+    -- Start HEAT decay timer (opera exclusivamente na RAM)
     Citizen.CreateThread(function()
         while true do
             Citizen.Wait(HEAT_DECAY_INTERVAL * 1000)
             DecayAllHeat()
         end
     end)
+
+    -- Thread de persistência periódica (Write-Behind Flush a cada 15 minutos)
+    Citizen.CreateThread(function()
+        while true do
+            Citizen.Wait(900000) -- 15 minutos
+            FlushDirtyHeat()
+        end
+    end)
+end)
+
+-- Flush Imediato na Remoção da Entidade
+AddEventHandler('entityRemoved', function(entity)
+    if GetEntityType(entity) == 2 then
+        local plate = GetVehicleNumberPlateText(entity):gsub('%s+', '')
+        if plate and plate ~= '' and dirtyPlates[plate] then
+            -- Flush imediato ao remover da memória
+            exports.oxmysql:update('UPDATE fish_vehicle_tunes SET heat = ?, heat_last_decay = ? WHERE plate = ?',
+                {heatCache[plate] and heatCache[plate].heat or 0, os.time(), plate})
+            dirtyPlates[plate] = nil
+            heatCache[plate] = nil -- Garbage Collection
+        end
+    end
 end)
 
 -- ============================================================
 -- HEAT Functions
 -- ============================================================
+
+-- Rotina Transacional (Write-Behind Flush)
+local function FlushDirtyHeat()
+    local queries = {}
+    
+    for plate, _ in pairs(dirtyPlates) do
+        if heatCache[plate] then
+            queries[#queries + 1] = {
+                query = 'INSERT INTO fish_vehicle_tunes (plate, heat, heat_last_decay) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE heat = ?, heat_last_decay = ?',
+                values = {plate, heatCache[plate].heat, heatCache[plate].lastDecay, heatCache[plate].heat, heatCache[plate].lastDecay}
+            }
+        end
+    end
+
+    if #queries > 0 then
+        -- Transação em lote garante consistência ACID com 1 único Round-Trip de rede
+        exports.oxmysql:transaction(queries, function(success)
+            if success then
+                dirtyPlates = {} -- Libera o heap apenas se a persistência for íntegra
+            end
+        end)
+    end
+end
 
 local function GetHeat(plate)
     return (heatCache[plate] and heatCache[plate].heat) or 0
@@ -71,10 +117,7 @@ local function AddHeat(plate, amount)
         heatCache[plate] = { heat = 0, lastDecay = os.time() }
     end
     heatCache[plate].heat = math.min(HEAT_MAX, heatCache[plate].heat + amount)
-    -- Persist async
-    MySQL.query('UPDATE fish_vehicle_tunes SET heat = ?, heat_last_decay = ? WHERE plate = ?', {
-        heatCache[plate].heat, os.time(), plate
-    })
+    dirtyPlates[plate] = true -- Marca placa como dirty, sem I/O síncrono
     return heatCache[plate].heat
 end
 
@@ -122,9 +165,7 @@ function DecayAllHeat()
                 if data.heat > fixedHeat then
                     data.heat = math.max(fixedHeat, data.heat - decayAmount)
                     data.lastDecay = now
-                    MySQL.query('UPDATE fish_vehicle_tunes SET heat = ?, heat_last_decay = ? WHERE plate = ?', {
-                        data.heat, now, plate
-                    })
+                    dirtyPlates[plate] = true -- Marca placa como dirty, sem I/O síncrono
                 else
                     data.lastDecay = now
                 end

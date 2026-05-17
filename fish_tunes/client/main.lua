@@ -20,24 +20,43 @@ AddStateBagChangeHandler('fish:heat', nil, function(bagName, key, value, _, repl
 end)
 
 -- ============================================================
--- Entity State Bag: Apply handling changes (from normalizer/remaps/tunes)
+-- Entity State Bag: Apply handling changes (via Reconciliation Queue, sem corrotinas zumbis)
 -- ============================================================
+local tunesReconciliationQueue = {}
+
+-- Consumidor Único Não-Bloqueante da fila de reconciliação (500ms polling)
+CreateThread(function()
+    while true do
+        for netId, data in pairs(tunesReconciliationQueue) do
+            if NetworkDoesEntityExistWithNetworkId(netId) then
+                local veh = NetworkGetEntityFromNetworkId(netId)
+                if DoesEntityExist(veh) then
+                    exports['fish_normalizer']:ApplyHandlingToVehicle(veh, data.value)
+                    tunesReconciliationQueue[netId] = nil -- Remove da fila
+                end
+            else
+                -- Incrementa contagem de tentativas, descarta após exceder limite
+                data.retries = (data.retries or 0) + 1
+                if data.retries >= 5 then
+                    tunesReconciliationQueue[netId] = nil
+                end
+            end
+        end
+        Wait(500) -- Polling mitigado a cada 500ms para estabilidade de rede
+    end
+end)
+
 AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, replicated)
     if not value then return end
     local netId = tonumber(bagName:gsub('entity:', ''), 10)
     if not netId then return end
-    Citizen.CreateThread(function()
-        local veh = NetworkGetEntityFromNetworkId(netId)
-        local attempts = 0
-        while not DoesEntityExist(veh) and attempts < 20 do
-            Citizen.Wait(100)
-            veh = NetworkGetEntityFromNetworkId(netId)
-            attempts = attempts + 1
-        end
-        if DoesEntityExist(veh) then
-            exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
-        end
-    end)
+    local veh = NetworkGetEntityFromNetworkId(netId)
+    if DoesEntityExist(veh) then
+        exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+    else
+        -- Adiciona à fila de reconciliação em vez de criar corrotina bloqueante
+        tunesReconciliationQueue[netId] = { value = value, retries = 0 }
+    end
 end)
 
 -- Expose tunesData for other client scripts

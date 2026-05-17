@@ -334,29 +334,49 @@ AddEventHandler('fish_normalizer:pushVehicleState', function(plate, vehicleNetId
 end)
 
 -- ============================================================
--- Entity Spawn: Restore state bags
+-- Entity Spawn: Fila de Reconciliação (elimina corrotinas zumbis)
 -- ============================================================
 
-AddEventHandler('entityCreated', function(entity)
-    Wait(3000)
-    if not DoesEntityExist(entity) or GetEntityType(entity) ~= 2 then return end
-    if GetEntityPopulationType(entity) < 6 then return end
+local serverReconciliationQueue = {}
+local RECONCILIATION_MAX_RETRIES = 5
 
-    local plate = GetVehicleNumberPlateText(entity):gsub('%s+', '')
-    if plate == '' then return end
-
-    local data = vehicleDataCache[plate] or FishDB.GetVehicle(plate)
-    if not data then return end
-
-    local remapData = FishDB.GetRemap(plate)
-    local tuneData  = FishDB.GetTunes(plate)
-
-    vehicleDataCache[plate] = data
-
-    local netId = NetworkGetNetworkIdFromEntity(entity)
-    if netId and netId > 0 then
-        PushVehicleState(netId, data, remapData, tuneData)
+-- Consumidor Único Não-Bloqueante da fila de reconciliação
+CreateThread(function()
+    while true do
+        for entity, data in pairs(serverReconciliationQueue) do
+            if DoesEntityExist(entity) and GetEntityType(entity) == 2 then
+                if GetEntityPopulationType(entity) >= 6 then
+                    local plate = GetVehicleNumberPlateText(entity):gsub('%s+', '')
+                    if plate ~= '' then
+                        local vehData = vehicleDataCache[plate] or FishDB.GetVehicle(plate)
+                        if vehData then
+                            local remapData = FishDB.GetRemap(plate)
+                            local tuneData  = FishDB.GetTunes(plate)
+                            vehicleDataCache[plate] = vehData
+                            local netId = NetworkGetNetworkIdFromEntity(entity)
+                            if netId and netId > 0 then
+                                PushVehicleState(netId, vehData, remapData, tuneData)
+                            end
+                        end
+                    end
+                    serverReconciliationQueue[entity] = nil -- Remove da fila
+                end
+            else
+                -- Incrementa contagem de tentativas, descarta após exceder limite
+                data.retries = (data.retries or 0) + 1
+                if data.retries >= RECONCILIATION_MAX_RETRIES then
+                    serverReconciliationQueue[entity] = nil
+                end
+            end
+        end
+        Wait(500) -- Polling mitigado a cada 500ms para estabilidade de rede
     end
+end)
+
+AddEventHandler('entityCreated', function(entity)
+    if GetEntityType(entity) ~= 2 then return end
+    -- Adiciona à fila de reconciliação em vez de criar corrotina bloqueante
+    serverReconciliationQueue[entity] = { retries = 0 }
 end)
 
 -- ============================================================
