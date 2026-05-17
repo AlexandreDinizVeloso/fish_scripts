@@ -9,10 +9,10 @@ Config.Ranks = {
 }
 
 Config.Weights = {
-    top_speed    = 0.30,
-    acceleration = 0.30,
-    handling     = 0.25,
-    braking      = 0.15
+    top_speed    = 0.25,
+    acceleration = 0.35,
+    handling     = 0.30,
+    braking      = 0.10
 }
 
 Config.Archetypes = {

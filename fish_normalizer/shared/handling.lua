@@ -379,73 +379,79 @@ local SUBARCHETYPE_TWEAKS = {
 
 -- ============================================================
 -- Archetype-specific reference brackets for PI calculation
--- These map handling values to 0-100 normalized scores per archetype
--- Each archetype has its own "100 is this value" target
+-- These map handling values to 0-100 normalised scores per archetype.
+-- Weights are in the PI formula, not here.
+-- maxFlatVel_ref brackets use effective speed: flatVel / sqrt(drag)
 -- ============================================================
 
 local ARCHETYPE_REFERENCE = {
     esportivo = {
-        -- Esportivo: cornering-focused. High flatvel = less important
-        maxFlatVel_ref       = {min = 140, max = 175, weight = 0.20},
-        driveForce_ref       = {min = 0.25, max = 0.50, weight = 0.25},
-        tractionCurveMax_ref = {min = 1.40, max = 2.50, weight = 0.30},
-        brakeForce_ref       = {min = 0.30, max = 0.70, weight = 0.15},
-        mass_ref             = {min = 2000, max = 1200, weight = 0.10, inverted = true}, -- lighter = better
+        -- Esportivo: cornering-focused, moderate top speed
+        maxFlatVel_ref       = {min = 15, max = 22},   -- flatVel/sqrt(drag): ~162/sqrt(6.7)≈62.6 normalised range
+        driveForce_ref       = {min = 0.00015, max = 0.00035},  -- (force/mass)*gears
+        tractionCurveMax_ref = {min = 1.40, max = 2.50},
+        brakeForce_ref       = {min = 0.30, max = 0.70},
+        mass_ref             = {min = 2000, max = 1200, inverted = true},
     },
     possante = {
-        -- Possante: acceleration-focused
-        maxFlatVel_ref       = {min = 130, max = 170, weight = 0.20},
-        driveForce_ref       = {min = 0.30, max = 0.55, weight = 0.40},  -- high accel weight
-        tractionCurveMax_ref = {min = 1.30, max = 2.00, weight = 0.20},
-        brakeForce_ref       = {min = 0.30, max = 0.60, weight = 0.10},
-        mass_ref             = {min = 1800, max = 1000, weight = 0.10, inverted = true},
+        -- Possante: acceleration-focused, heavy
+        maxFlatVel_ref       = {min = 14, max = 20},
+        driveForce_ref       = {min = 0.00020, max = 0.00045},
+        tractionCurveMax_ref = {min = 1.30, max = 2.00},
+        brakeForce_ref       = {min = 0.30, max = 0.60},
+        mass_ref             = {min = 1800, max = 1000, inverted = true},
     },
     exotico = {
-        -- Exotico: top speed focused
-        maxFlatVel_ref       = {min = 145, max = 190, weight = 0.40},  -- high speed weight
-        driveForce_ref       = {min = 0.25, max = 0.50, weight = 0.25},
-        tractionCurveMax_ref = {min = 1.40, max = 2.30, weight = 0.15},
-        brakeForce_ref       = {min = 0.30, max = 0.65, weight = 0.10},
-        mass_ref             = {min = 2000, max = 1200, weight = 0.10, inverted = true},
+        -- Exotico: top speed king, low drag
+        maxFlatVel_ref       = {min = 18, max = 28},
+        driveForce_ref       = {min = 0.00018, max = 0.00040},
+        tractionCurveMax_ref = {min = 1.40, max = 2.30},
+        brakeForce_ref       = {min = 0.30, max = 0.65},
+        mass_ref             = {min = 2000, max = 1200, inverted = true},
     },
     supercarro = {
         -- Supercarro: balanced, high all-round
-        maxFlatVel_ref       = {min = 145, max = 190, weight = 0.25},
-        driveForce_ref       = {min = 0.30, max = 0.55, weight = 0.25},
-        tractionCurveMax_ref = {min = 1.40, max = 2.50, weight = 0.25},
-        brakeForce_ref       = {min = 0.40, max = 1.00, weight = 0.15},
-        mass_ref             = {min = 2000, max = 1200, weight = 0.10, inverted = true},
+        maxFlatVel_ref       = {min = 17, max = 26},
+        driveForce_ref       = {min = 0.00020, max = 0.00042},
+        tractionCurveMax_ref = {min = 1.40, max = 2.50},
+        brakeForce_ref       = {min = 0.40, max = 1.00},
+        mass_ref             = {min = 2000, max = 1200, inverted = true},
     },
     moto = {
-        maxFlatVel_ref       = {min = 130, max = 165, weight = 0.20},
-        driveForce_ref       = {min = 0.30, max = 0.55, weight = 0.25},
-        tractionCurveMax_ref = {min = 1.50, max = 2.60, weight = 0.30},
-        brakeForce_ref       = {min = 0.30, max = 0.60, weight = 0.15},
-        mass_ref             = {min = 600, max = 300, weight = 0.10, inverted = true},
+        maxFlatVel_ref       = {min = 16, max = 24},
+        driveForce_ref       = {min = 0.00050, max = 0.00120},
+        tractionCurveMax_ref = {min = 1.50, max = 2.60},
+        brakeForce_ref       = {min = 0.30, max = 0.60},
+        mass_ref             = {min = 600, max = 300, inverted = true},
     },
     utilitario = {
-        maxFlatVel_ref       = {min = 80, max = 130, weight = 0.20},
-        driveForce_ref       = {min = 0.20, max = 0.40, weight = 0.20},
-        tractionCurveMax_ref = {min = 1.20, max = 2.00, weight = 0.20},
-        brakeForce_ref       = {min = 0.25, max = 0.50, weight = 0.20},
-        mass_ref             = {min = 2500, max = 1500, weight = 0.20, inverted = true},
+        maxFlatVel_ref       = {min = 8, max = 16},
+        driveForce_ref       = {min = 0.00010, max = 0.00025},
+        tractionCurveMax_ref = {min = 1.20, max = 2.00},
+        brakeForce_ref       = {min = 0.25, max = 0.50},
+        mass_ref             = {min = 2500, max = 1500, inverted = true},
     },
     especial = {
-        maxFlatVel_ref       = {min = 130, max = 170, weight = 0.25},
-        driveForce_ref       = {min = 0.25, max = 0.45, weight = 0.25},
-        tractionCurveMax_ref = {min = 1.30, max = 2.10, weight = 0.25},
-        brakeForce_ref       = {min = 0.30, max = 0.60, weight = 0.15},
-        mass_ref             = {min = 2000, max = 1000, weight = 0.10, inverted = true},
+        maxFlatVel_ref       = {min = 14, max = 22},
+        driveForce_ref       = {min = 0.00015, max = 0.00035},
+        tractionCurveMax_ref = {min = 1.30, max = 2.10},
+        brakeForce_ref       = {min = 0.30, max = 0.60},
+        mass_ref             = {min = 2000, max = 1000, inverted = true},
     },
 }
 
 -- ============================================================
 -- Calculate PI Score from Final Handling Profile
--- This is the SHARED function used by both client and server
+-- Cascade: M_final = (M_base + ΔT) × λ_remap
+--   M_base  = Normalizer archetype-derived handling values
+--   ΔT      = Tunes additive deltas (parts bonuses)
+--   λ_remap = Remap multiplicative coefficient (ECU/archetype)
+--
+-- PI = (α × V_score) + (β × A_score) + (γ × H_score) + (δ × B_score)
+-- Weights: α=0.25, β=0.35, γ=0.30, δ=0.10
 -- ============================================================
 
 function CalculatePIFromProfile(handlingProfile, archetype, tunePI)
-    -- Get the reference brackets for this archetype
     local ref = ARCHETYPE_REFERENCE[archetype] or ARCHETYPE_REFERENCE.esportivo
 
     local function normalize(value, refBracket)
@@ -454,64 +460,60 @@ function CalculatePIFromProfile(handlingProfile, archetype, tunePI)
         local inverted = refBracket.inverted or false
 
         if inverted then
-            -- lower = better (mass: lighter = higher score)
             local clamped = math.max(math.min(value, max), min)
             return ((max - clamped) / (max - min)) * 100
         else
-            -- higher = better
             local clamped = math.max(math.min(value, max), min)
             return ((clamped - min) / (max - min)) * 100
         end
     end
 
-    local score = 0
-    local totalWeight = 0
+    -- ── V_score: Top Speed (drag-corrected) ──
+    -- V_score is not raw flatVel — it accounts for the drag equilibrium.
+    -- At terminal velocity: F_motor = F_drag × v²
+    -- A vehicle with high flatVel but extreme drag is slower in practice.
+    -- Effective speed proxy = flatVel / sqrt(dragCoeff) normalised to archetype bracket.
+    local vRaw = handlingProfile.fInitialDriveMaxFlatVel or 115.0
+    local drag = handlingProfile.fInitialDragCoeff or 7.0
+    local vEffective = vRaw / math.sqrt(math.max(drag, 1.0))
+    local vScore = normalize(vEffective, ref.maxFlatVel_ref)
 
-    -- Top speed score from fInitialDriveMaxFlatVel
-    if handlingProfile.fInitialDriveMaxFlatVel then
-        local ns = normalize(handlingProfile.fInitialDriveMaxFlatVel, ref.maxFlatVel_ref)
-        score = score + (ns * ref.maxFlatVel_ref.weight)
-        totalWeight = totalWeight + ref.maxFlatVel_ref.weight
-    end
+    -- ── A_score: Acceleration (force-to-mass ratio × gear count) ──
+    -- F/M ratio determines how quickly the vehicle reaches V_max.
+    -- More gears = smoother power delivery = faster average acceleration.
+    local driveForce = handlingProfile.fInitialDriveForce or 0.30
+    local mass       = handlingProfile.fMass or 1500.0
+    local gears      = handlingProfile.nInitialDriveGears or 6
+    local forceToMass = (driveForce / math.max(mass, 1.0)) * gears
+    local aScore = normalize(forceToMass, ref.driveForce_ref)
 
-    -- Acceleration score from fInitialDriveForce
-    if handlingProfile.fInitialDriveForce then
-        local ns = normalize(handlingProfile.fInitialDriveForce, ref.driveForce_ref)
-        score = score + (ns * ref.driveForce_ref.weight)
-        totalWeight = totalWeight + ref.driveForce_ref.weight
-    end
+    -- ── H_score: Handling/Grip ──
+    -- Average of traction curve max and lateral, weighted by bias distribution.
+    local tMax      = handlingProfile.fTractionCurveMax or 1.70
+    local tMin      = handlingProfile.fTractionCurveMin or 1.50
+    local tLateral  = handlingProfile.fTractionCurveLateral or 22.0
+    local hRaw = (tMax * 0.50) + (tMin * 0.30) + (tLateral * 0.20)
+    local hScore = normalize(hRaw, ref.tractionCurveMax_ref)
 
-    -- Handling score from fTractionCurveMax
-    if handlingProfile.fTractionCurveMax then
-        local ns = normalize(handlingProfile.fTractionCurveMax, ref.tractionCurveMax_ref)
-        score = score + (ns * ref.tractionCurveMax_ref.weight)
-        totalWeight = totalWeight + ref.tractionCurveMax_ref.weight
-    end
+    -- ── B_score: Braking ──
+    local bRaw = handlingProfile.fBrakeForce or 0.50
+    local bScore = normalize(bRaw, ref.brakeForce_ref)
 
-    -- Braking score from fBrakeForce
-    if handlingProfile.fBrakeForce then
-        local ns = normalize(handlingProfile.fBrakeForce, ref.brakeForce_ref)
-        score = score + (ns * ref.brakeForce_ref.weight)
-        totalWeight = totalWeight + ref.brakeForce_ref.weight
-    end
+    -- ── PI composite (weights from Config.Weights) ──
+    local alpha = 0.25  -- top speed
+    local beta  = 0.35  -- acceleration
+    local gamma = 0.30  -- handling
+    local delta = 0.10  -- braking
 
-    -- Weight score
-    if handlingProfile.fMass then
-        local ns = normalize(handlingProfile.fMass, ref.mass_ref)
-        score = score + (ns * ref.mass_ref.weight)
-        totalWeight = totalWeight + ref.mass_ref.weight
-    end
+    local basePI = (alpha * vScore) + (beta * aScore) + (gamma * hScore) + (delta * bScore)
 
-    local finalScore = 0
-    if totalWeight > 0 then
-        finalScore = score / totalWeight
-    end
-
-    -- Add tune PI (from part bonuses, calculated server-side)
-    finalScore = finalScore + (tunePI or 0)
+    -- ── Cascade: additive tune delta ──
+    -- ΔT is added AFTER base PI, before remap multiplier.
+    -- tunePI comes from CalculateTunePI (part bonuses as PI offsets).
+    basePI = basePI + (tunePI or 0)
 
     -- Clamp to 0-1000
-    return math.max(0, math.min(1000, math.floor(finalScore)))
+    return math.max(0, math.min(1000, math.floor(basePI)))
 end
 
 -- ============================================================

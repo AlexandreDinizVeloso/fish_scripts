@@ -147,11 +147,13 @@ local function MaybeCreateNewVersion()
 end
 
 -- ============================================================
--- State Bag Listeners: detect tune/remap changes mid-session
+-- State Bag Listener: detect tune/remap changes mid-session
+-- Consolidated: reads from fish_physics_matrix instead of individual bags
 -- ============================================================
 
-AddStateBagChangeHandler('fish:score', nil, function(bagName, key, value, _, replicated)
+AddStateBagChangeHandler('fish_physics_matrix', nil, function(bagName, key, value, _, replicated)
     if not isRecording then return end
+    if not value then return end
     local ped = PlayerPedId()
     if not IsPedInAnyVehicle(ped, false) then return end
     local veh   = GetVehiclePedIsIn(ped, false)
@@ -160,22 +162,6 @@ AddStateBagChangeHandler('fish:score', nil, function(bagName, key, value, _, rep
     local myVeh = NetworkGetEntityFromNetworkId(netId)
     if myVeh == veh then
         -- Debounce: wait 500ms then check
-        Citizen.CreateThread(function()
-            Citizen.Wait(500)
-            MaybeCreateNewVersion()
-        end)
-    end
-end)
-
-AddStateBagChangeHandler('fish:archetype', nil, function(bagName, key, value, _, replicated)
-    if not isRecording then return end
-    local ped = PlayerPedId()
-    if not IsPedInAnyVehicle(ped, false) then return end
-    local veh   = GetVehiclePedIsIn(ped, false)
-    local netId = tonumber(bagName:gsub('entity:', ''), 10)
-    if not netId then return end
-    local myVeh = NetworkGetEntityFromNetworkId(netId)
-    if myVeh == veh then
         Citizen.CreateThread(function()
             Citizen.Wait(500)
             MaybeCreateNewVersion()

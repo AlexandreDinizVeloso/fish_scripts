@@ -267,10 +267,8 @@ AddEventHandler('fish_tunes:installPart', function(plate, category, level, vehic
         GetPlayerName(src), level, category, plate, totalHeat, cost
     ))
 
-    -- Push state bag update
+    -- Push consolidated state bag (heat is now inside fish_physics_matrix)
     if vehicleNetId and vehicleNetId > 0 then
-        -- Update netId entity state bag for HEAT
-        Entity(NetworkGetEntityFromNetworkId(vehicleNetId)).state:set('fish:heat', totalHeat, true)
         RefreshVehicleState(plate, vehicleNetId, existing)
     end
 
@@ -570,7 +568,6 @@ AddEventHandler('fish_tunes:saveTunes', function(plate, data)
         local vehPlate = GetVehicleNumberPlateText(veh):gsub('%s+', '')
         if vehPlate == plate then
             local netId = NetworkGetNetworkIdFromEntity(veh)
-            Entity(veh).state:set('fish:heat', totalHeat, true)
             RefreshVehicleState(plate, netId, data)
         end
     end
@@ -700,20 +697,15 @@ AddEventHandler('fish_tunes:applyTireCompound', function(plate, compound, vehicl
         return
     end
 
-    -- Store tire compound in tunes data
+    -- Store tire compound AND resolved handling multipliers in tunes data
     local identifier = GetPlayerIdentifier(src, 0) or ('player:' .. src)
     local existing = DBGetTunes(plate) or { parts = {}, drivetrain = 'FWD', heat = 0 }
     existing.tire_compound = compound
+    existing.tire_handling = tireData.handling  -- pre-computed for L1 cache lookup
     DBSaveTunes(plate, existing, identifier)
 
-    -- Push tire compound via state bag
+    -- Push consolidated state bag (tire_compound and tire_handling now inside fish_physics_matrix)
     if vehicleNetId and vehicleNetId > 0 then
-        local entity = NetworkGetEntityFromNetworkId(vehicleNetId)
-        if DoesEntityExist(entity) then
-            Entity(entity).state:set('fish:tire_compound', compound, true)
-            -- Apply tire handling multipliers
-            Entity(entity).state:set('fish:tire_handling', tireData.handling, true)
-        end
         RefreshVehicleState(plate, vehicleNetId, existing)
     end
 
@@ -758,10 +750,6 @@ AddEventHandler('fish_tunes:toggleVehicleFlag', function(plate, flagKey, vehicle
     DBSaveTunes(plate, existing, identifier)
 
     if vehicleNetId and vehicleNetId > 0 then
-        local entity = NetworkGetEntityFromNetworkId(vehicleNetId)
-        if DoesEntityExist(entity) then
-            Entity(entity).state:set('fish:vehicle_flags', existing.vehicle_flags, true)
-        end
         RefreshVehicleState(plate, vehicleNetId, existing)
     end
 
@@ -801,11 +789,8 @@ AddEventHandler('fish_tunes:saveECUTune', function(plate, ecuData, vehicleNetId)
     existing.ecu_tune = ecuData
     DBSaveTunes(plate, existing, identifier)
 
+    -- Push consolidated state bag (ecu_tune now inside fish_physics_matrix)
     if vehicleNetId and vehicleNetId > 0 then
-        local entity = NetworkGetEntityFromNetworkId(vehicleNetId)
-        if DoesEntityExist(entity) then
-            Entity(entity).state:set('fish:ecu_tune', ecuData, true)
-        end
         RefreshVehicleState(plate, vehicleNetId, existing)
     end
 

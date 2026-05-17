@@ -4,6 +4,8 @@
 -- ============================================================
 
 local vehicleDataCache = {}  -- in-memory cache keyed by plate
+local tunesCache = {}        -- L1 cache: tunes data keyed by plate
+local remapsCache = {}       -- L1 cache: remaps data keyed by plate
 
 -- DB is set as global FishDB by shared/database.lua (loaded before this file)
 
@@ -18,9 +20,43 @@ AddEventHandler('onResourceStart', function(resourceName)
     FishDB.CreateTables()
     vehicleDataCache = FishDB.GetAllVehicles()
 
+    -- L1 Cache: preload all tunes and remaps into RAM (O(1) lookup at runtime)
+    local allTunes = MySQL.query.await('SELECT * FROM fish_vehicle_tunes', {})
+    if allTunes then
+        for _, row in ipairs(allTunes) do
+            if row.plate then
+                local data = row
+                if data.parts and type(data.parts) == 'string' then
+                    data.parts = json.decode(data.parts) or {}
+                end
+                tunesCache[row.plate] = data
+            end
+        end
+    end
+
+    local allRemaps = MySQL.query.await('SELECT * FROM fish_vehicle_remaps', {})
+    if allRemaps then
+        for _, row in ipairs(allRemaps) do
+            if row.plate then
+                local data = row
+                if data.stats and type(data.stats) == 'string' then
+                    data.stats = json.decode(data.stats) or {}
+                end
+                if data.final_stats and type(data.final_stats) == 'string' then
+                    data.final_stats = json.decode(data.final_stats) or {}
+                end
+                remapsCache[row.plate] = data
+            end
+        end
+    end
+
     local count = 0
     for _ in pairs(vehicleDataCache) do count = count + 1 end
-    print(('[fish_normalizer] Started. %d vehicles in database.'):format(count))
+    local tunesCount = 0
+    for _ in pairs(tunesCache) do tunesCount = tunesCount + 1 end
+    local remapsCount = 0
+    for _ in pairs(remapsCache) do remapsCount = remapsCount + 1 end
+    print(('[fish_normalizer] Started. %d vehicles, %d tunes, %d remaps in cache.'):format(count, tunesCount, remapsCount))
 end)
 
 -- ============================================================
@@ -122,13 +158,35 @@ local function GetDampedPI(base_score)
     return (PI_LUT[lowerBound] or 0.0) * (1 - weight) + (PI_LUT[upperBound] or 0.0) * weight
 end
 
-local function CalculateDisplayScore(dbScore, tunePI, remapPI)
-    local rawUpgrades = (tunePI or 0) + (remapPI or 0)
-    if rawUpgrades <= 0 then return math.floor(dbScore) end
-    
-    local scale = GetDampedPI(dbScore)
-    
-    return math.max(0, math.min(1000, math.floor(dbScore + rawUpgrades * scale)))
+-- ============================================================
+-- PI Cascade: M_final = (M_base + ΔT) × λ_remap
+--   M_base  = normalizer-derived base PI (dbScore)
+--   ΔT      = tunes additive PI (part bonuses)
+--   λ_remap = remap multiplicative coefficient [0.92 .. 1.08]
+-- ============================================================
+
+local function CalculateDisplayScore(dbScore, tunePI, remapData)
+    local basePI = dbScore or 500
+    local deltaT = tunePI or 0
+
+    -- Step 1: additive tune delta
+    local afterTune = basePI + deltaT
+
+    -- Step 2: multiplicative remap coefficient (λ)
+    -- λ derived from remap final_stats average deviation from 50 (neutral).
+    -- Range: 0.92 (all stats at 0) to 1.08 (all stats at 100).
+    -- 50 = neutral = λ 1.0 (no change from remap)
+    local lambda = 1.0
+    if remapData then
+        local stats = remapData.final_stats or remapData.finalStats
+        if stats then
+            local avg = ((stats.top_speed or 50) + (stats.acceleration or 50)
+                       + (stats.handling or 50) + (stats.braking or 50)) / 4
+            lambda = 0.92 + ((avg / 100) * 0.16)
+        end
+    end
+
+    return math.max(0, math.min(1000, math.floor(afterTune * lambda)))
 end
 
 -- ============================================================
@@ -152,7 +210,9 @@ end
 
 function PushVehicleState(netId, data, remapData, tuneData)
     if not netId or netId == 0 then return end
-    local entityState = Entity(NetworkGetEntityFromNetworkId(netId)).state
+    local entity = NetworkGetEntityFromNetworkId(netId)
+    if not DoesEntityExist(entity) then return end
+    local entityState = Entity(entity).state
     if not entityState then return end
 
     local parts = {}
@@ -163,16 +223,6 @@ function PushVehicleState(netId, data, remapData, tuneData)
     -- Calculate instability and tune PI contribution
     local instability = CalculateInstability(parts)
     local tunePI = CalculateTunePI(parts)
-
-    -- Calculate remap PI contribution from final_stats
-    local remapPI = 0
-    if remapData then
-        local stats = remapData.final_stats or remapData.finalStats
-        if stats then
-            local avg = ((stats.top_speed or 50) + (stats.acceleration or 50) + (stats.handling or 50) + (stats.braking or 50)) / 4
-            remapPI = math.floor((avg - 50) * 2)  -- maps 0-100 to -100 to +100 PI
-        end
-    end
 
     -- Build the handling profile
     local archetype = data.archetype or 'esportivo'
@@ -213,10 +263,9 @@ function PushVehicleState(netId, data, remapData, tuneData)
         return
     end
 
-    -- FIX: Calculate display score = base PI + tune contribution + remap contribution
-    -- Do NOT recalculate PI from handling profile (which uses a different 0-100 scale)
-    -- Do NOT overwrite data.score in the cache
-    local displayScore = CalculateDisplayScore(dbScore, tunePI, remapPI)
+    -- PI Cascade: M_final = (M_base + ΔT) × λ_remap
+    -- M_base = dbScore (normalizer), ΔT = tunePI (additive), λ = remap coefficient (multiplicative)
+    local displayScore = CalculateDisplayScore(dbScore, tunePI, remapData)
     local displayRank = GetRankFromScore(displayScore)
     local drivetrain = (tuneData and tuneData.drivetrain) or 'FWD'
 
@@ -235,7 +284,9 @@ function PushVehicleState(netId, data, remapData, tuneData)
         flags = flags | 2  -- bit 1: hasDamage
     end
 
-    -- Transactional Physics Matrix: aggregate all state parameters into a single O(1) MsgPack payload
+    -- Consolidated Physics Matrix: ALL entity state in a SINGLE MsgPack payload
+    -- Eliminates redundant state bags: fish:heat, fish:tire_compound, fish:tire_handling,
+    -- fish:vehicle_flags, fish:ecu_tune — reducing network propagation from N packets to 1
     local physicsMatrix = {
         score = displayScore,
         rank = displayRank,
@@ -243,7 +294,12 @@ function PushVehicleState(netId, data, remapData, tuneData)
         handling = handlingProfile,
         heat = (tuneData and tuneData.heat) or 0,
         drivetrain = drivetrain,
-        flags = flags  -- int32 substituindo N chaves booleanas, redução de ~96% no payload
+        flags = flags,
+        -- Consolidated tuning state (previously separate state bags)
+        tire_compound = (tuneData and tuneData.tire_compound) or nil,
+        tire_handling = (tuneData and tuneData.tire_handling) or nil,
+        vehicle_flags = (tuneData and tuneData.vehicle_flags) or nil,
+        ecu_tune = (tuneData and tuneData.ecu_tune) or nil,
     }
     entityState:set('fish_physics_matrix', physicsMatrix, true)
 
@@ -455,11 +511,25 @@ exports('DBGetAllVehicles', function()
     return FishDB.GetAllVehicles()
 end)
 exports('DBGetRemap', function(plate)
-    return FishDB.GetRemap(plate)
+    -- L1 Cache: read from RAM in O(1), fallback to DB only on cache miss
+    if remapsCache[plate] then return remapsCache[plate] end
+    local row = FishDB.GetRemap(plate)
+    if row then
+        if row.stats and type(row.stats) == 'string' then
+            row.stats = json.decode(row.stats) or {}
+        end
+        if row.final_stats and type(row.final_stats) == 'string' then
+            row.final_stats = json.decode(row.final_stats) or {}
+        end
+        remapsCache[plate] = row
+    end
+    return row
 end)
 exports('DBSaveRemap', function(plate, data, owner)
     local success = FishDB.SaveRemap(plate, data, owner)
     if success then
+        -- Write-through: update L1 cache immediately
+        remapsCache[plate] = data
         local rData = {
             [plate] = {
                 plate = plate,
@@ -474,17 +544,31 @@ exports('DBSaveRemap', function(plate, data, owner)
     return success
 end)
 exports('DBGetTunes', function(plate)
-    return FishDB.GetTunes(plate)
+    -- L1 Cache: read from RAM in O(1), fallback to DB only on cache miss
+    if tunesCache[plate] then return tunesCache[plate] end
+    local row = FishDB.GetTunes(plate)
+    if row then
+        if row.parts and type(row.parts) == 'string' then
+            row.parts = json.decode(row.parts) or {}
+        end
+        tunesCache[plate] = row
+    end
+    return row
 end)
 exports('DBSaveTunes', function(plate, data, owner)
     local success = FishDB.SaveTunes(plate, data, owner)
     if success then
+        -- Write-through: update L1 cache immediately
+        tunesCache[plate] = data
         local tData = {
             [plate] = {
                 plate = plate,
                 parts = data.parts or {},
                 drivetrain = data.drivetrain or 'FWD',
-                heat = data.heat or 0
+                heat = data.heat or 0,
+                tire_compound = data.tire_compound,
+                vehicle_flags = data.vehicle_flags,
+                ecu_tune = data.ecu_tune,
             }
         }
         TriggerClientEvent('fish_normalizer:receivePerformanceData', -1, nil, tData)
@@ -520,38 +604,31 @@ end)
 RegisterNetEvent('fish_normalizer:requestPerformanceData')
 AddEventHandler('fish_normalizer:requestPerformanceData', function()
     local src = source
-    
-    local allRemaps = MySQL.query.await('SELECT * FROM fish_vehicle_remaps', {})
-    local allTunes = MySQL.query.await('SELECT * FROM fish_vehicle_tunes', {})
-    
+
+    -- Serve from L1 cache (already populated at startup), no DB round-trip
     local rData = {}
-    if allRemaps then
-        for _, row in ipairs(allRemaps) do
-            if row.plate then
-                rData[row.plate] = {
-                    plate = row.plate,
-                    category = row.category,
-                    sub_category = row.sub_category,
-                    stats = row.stats and (type(row.stats) == 'string' and json.decode(row.stats) or row.stats) or {},
-                    finalStats = row.final_stats and (type(row.final_stats) == 'string' and json.decode(row.final_stats) or row.final_stats) or {}
-                }
-            end
-        end
+    for plate, row in pairs(remapsCache) do
+        rData[plate] = {
+            plate = plate,
+            category = row.category,
+            sub_category = row.sub_category,
+            stats = row.stats or {},
+            finalStats = row.final_stats or row.finalStats or {}
+        }
     end
-    
+
     local tData = {}
-    if allTunes then
-        for _, row in ipairs(allTunes) do
-            if row.plate then
-                tData[row.plate] = {
-                    plate = row.plate,
-                    parts = row.parts and (type(row.parts) == 'string' and json.decode(row.parts) or row.parts) or {},
-                    drivetrain = row.drivetrain or 'FWD',
-                    heat = row.heat or 0
-                }
-            end
-        end
+    for plate, row in pairs(tunesCache) do
+        tData[plate] = {
+            plate = plate,
+            parts = row.parts or {},
+            drivetrain = row.drivetrain or 'FWD',
+            heat = row.heat or 0,
+            tire_compound = row.tire_compound,
+            vehicle_flags = row.vehicle_flags,
+            ecu_tune = row.ecu_tune,
+        }
     end
-    
+
     TriggerClientEvent('fish_normalizer:receivePerformanceData', src, rData, tData)
 end)

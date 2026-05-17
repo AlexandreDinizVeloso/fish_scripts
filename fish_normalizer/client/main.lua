@@ -10,41 +10,34 @@ local isAdmin = false
 -- Reconciliação via interrupção do motor (Event-Driven): zero polling, zero fila.
 -- entityCreated dispara quando a entidade se materializa fisicamente no cliente.
 
-AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, replicated)
+AddStateBagChangeHandler('fish_physics_matrix', nil, function(bagName, key, value, _, replicated)
     if not value then return end
     local netId = tonumber(bagName:gsub('entity:', ''), 10)
     if not netId then return end
     local veh = NetworkGetEntityFromNetworkId(netId)
     if DoesEntityExist(veh) then
-        exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
-        TriggerEvent('fish_normalizer:requestReapply', veh)
+        if value.handling then
+            exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value.handling)
+            TriggerEvent('fish_normalizer:requestReapply', veh)
+        end
+        -- Update local cache with score from consolidated matrix
+        if value.score then
+            local plate = GetVehicleNumberPlateText(veh):gsub('%s+', '')
+            if vehicleData[plate] then
+                vehicleData[plate].score = value.score
+            end
+        end
     end
-    -- Se a entidade não existe fisicamente, o handler entityCreated capturará
-    -- quando ela se materializar — sem fila, sem polling, sem race condition.
 end)
 
 -- Interceptação de streaming físico O(1): acionada quando a entidade aparece no mundo
 AddEventHandler('entityCreated', function(entity)
     if GetEntityType(entity) == 2 then -- O(1) Type Check: veículo
-        local stateBagProfile = Entity(entity).state['fish:handling']
-        if stateBagProfile then
+        local matrix = Entity(entity).state['fish_physics_matrix']
+        if matrix and matrix.handling then
             -- O veículo acaba de materializar-se no cliente. Aplica-se o handling imediatamente.
-            exports['fish_normalizer']:ApplyHandlingToVehicle(entity, stateBagProfile)
+            exports['fish_normalizer']:ApplyHandlingToVehicle(entity, matrix.handling)
             TriggerEvent('fish_normalizer:requestReapply', entity)
-        end
-    end
-end)
-
--- Update local cache when server pushes score
-AddStateBagChangeHandler('fish:score', nil, function(bagName, key, value, _, replicated)
-    if not value then return end
-    local netId = tonumber(bagName:gsub('entity:', ''), 10)
-    if not netId then return end
-    local veh = NetworkGetEntityFromNetworkId(netId)
-    if DoesEntityExist(veh) then
-        local plate = GetVehicleNumberPlateText(veh):gsub('%s+', '')
-        if vehicleData[plate] then
-            vehicleData[plate].score = value
         end
     end
 end)

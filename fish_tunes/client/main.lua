@@ -4,44 +4,34 @@ local currentVehicle = nil
 local tunesData = {}
 
 -- ============================================================
--- Entity State Bag: React to HEAT changes pushed by server
+-- Entity State Bag: React to consolidated physics matrix changes
+-- All state (heat, handling, tire_compound, flags, ecu) in one payload
 -- ============================================================
-AddStateBagChangeHandler('fish:heat', nil, function(bagName, key, value, _, replicated)
-    if not value then return end
-    local netId = tonumber(bagName:gsub('entity:', ''), 10)
-    if not netId then return end
-    -- Update NUI if open and this is our current vehicle
-    if isNuiOpen and currentVehicle then
-        local veh = NetworkGetEntityFromNetworkId(netId)
-        if veh == currentVehicle then
-            SendNUIMessage({ action = 'updateHeat', heat = value })
-        end
-    end
-end)
-
--- ============================================================
--- Entity State Bag: Apply handling changes (Event-Driven, zero fila)
--- ============================================================
--- Reconciliação via interrupção do motor: entityCreated captura materialização física.
--- Sem polling, sem fila, sem race condition de TTL.
-
-AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, replicated)
+AddStateBagChangeHandler('fish_physics_matrix', nil, function(bagName, key, value, _, replicated)
     if not value then return end
     local netId = tonumber(bagName:gsub('entity:', ''), 10)
     if not netId then return end
     local veh = NetworkGetEntityFromNetworkId(netId)
-    if DoesEntityExist(veh) then
-        exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+
+    -- Apply handling from consolidated matrix
+    if DoesEntityExist(veh) and value.handling then
+        exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value.handling)
     end
-    -- Se a entidade não existe fisicamente, entityCreated capturará na materialização.
+
+    -- Update NUI heat if open and this is our current vehicle
+    if isNuiOpen and currentVehicle and veh == currentVehicle then
+        if value.heat then
+            SendNUIMessage({ action = 'updateHeat', heat = value.heat })
+        end
+    end
 end)
 
 -- Interceptação O(1) de streaming físico: aplica handling no momento da instanciação
 AddEventHandler('entityCreated', function(entity)
     if GetEntityType(entity) == 2 then -- O(1) Type Check: veículo
-        local stateBagProfile = Entity(entity).state['fish:handling']
-        if stateBagProfile then
-            exports['fish_normalizer']:ApplyHandlingToVehicle(entity, stateBagProfile)
+        local matrix = Entity(entity).state['fish_physics_matrix']
+        if matrix and matrix.handling then
+            exports['fish_normalizer']:ApplyHandlingToVehicle(entity, matrix.handling)
         end
     end
 end)
