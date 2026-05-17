@@ -9,16 +9,29 @@ local isAdmin = false
 -- ============================================================
 local reconciliationQueue = {}
 
--- Fila de Reconciliação (Consumidor Único Não-Bloqueante)
+-- Fila de Reconciliação (Consumidor Único Não-Bloqueante) com TTL
 CreateThread(function()
     while true do
-        for netId, value in pairs(reconciliationQueue) do
+        for netId, entry in pairs(reconciliationQueue) do
             if NetworkDoesEntityExistWithNetworkId(netId) then
                 local veh = NetworkGetEntityFromNetworkId(netId)
                 if DoesEntityExist(veh) then
                     -- APLICAR METADADOS/HANDLING STATEBAG AQUI
-                    exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
+                    exports['fish_normalizer']:ApplyHandlingToVehicle(veh, entry.data)
                     TriggerEvent('fish_normalizer:requestReapply', veh)
+                    reconciliationQueue[netId] = nil
+                else
+                    -- Entity exists in network scope but not yet in world physics
+                    entry.retries = entry.retries + 1
+                    if entry.retries > 20 then
+                        -- Dead-Letter descarte: 20 tentativas (10s) sem materialização
+                        reconciliationQueue[netId] = nil
+                    end
+                end
+            else
+                -- netId não existe mais na rede (ex: Routing Bucket transition)
+                entry.retries = entry.retries + 1
+                if entry.retries > 20 then
                     reconciliationQueue[netId] = nil
                 end
             end
@@ -36,7 +49,7 @@ AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, 
         exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
         TriggerEvent('fish_normalizer:requestReapply', veh)
     else
-        reconciliationQueue[netId] = value
+        reconciliationQueue[netId] = { data = value, retries = 0 }
     end
 end)
 
@@ -451,19 +464,40 @@ end
 -- ============================================================
 -- Hold K: Show nearby vehicle ratings (reads state bag)
 -- ============================================================
-local cachedVehicles = {}
 
--- Spatial Partitioning Updater (Execução a 1 Hz / 1000ms)
+-- Double Buffer Pattern: pré-alocação zero-allocation para spatial partitioning
+-- bufferA e bufferB: blocos de memória pré-alocados, NUNCA destruídos
+-- activeCache: ponteiro atômico de leitura (front buffer)
+-- backBuffer: buffer inativo para escrita chunked
+local bufferA = {}
+local bufferB = {}
+local activeCache = bufferA
+local backBuffer = bufferB
+
+-- Time-Slicing: processa CHUNK_SIZE veículos por frame para achatar picos de CPU
+local CHUNK_SIZE = 100
+local poolIndex = 1
+local scanInProgress = false
+
+-- Spatial Partitioning Updater com Zero-Allocation + Time-Slicing + Double Buffer
 CreateThread(function()
     while true do
         local playerPed = PlayerPedId()
         if DoesEntityExist(playerPed) then
             local pos = GetEntityCoords(playerPed)
             local pool = GetGamePool('CVehicle')
-            local tempCache = {}
 
-            for i = 1, #pool do
-                local veh = pool[i]
+            -- Iniciar novo ciclo de varredura
+            if not scanInProgress then
+                table.wipe(backBuffer) -- Zera índices sem destruir bloco de memória
+                poolIndex = 1
+                scanInProgress = true
+            end
+
+            -- Time-Slice: processa apenas CHUNK_SIZE veículos neste frame
+            local processed = 0
+            while poolIndex <= #pool and processed < CHUNK_SIZE do
+                local veh = pool[poolIndex]
                 if DoesEntityExist(veh) then
                     local vehPos = GetEntityCoords(veh)
                     
@@ -501,7 +535,7 @@ CreateThread(function()
                             local cr = tonumber(rankColor:sub(2,3), 16) or 139
                             local cg = tonumber(rankColor:sub(4,5), 16) or 139
                             local cb = tonumber(rankColor:sub(6,7), 16) or 139
-                            tempCache[#tempCache + 1] = {
+                            backBuffer[#backBuffer + 1] = {
                                 entity = veh,
                                 score = displayScore,
                                 rank = displayRank,
@@ -510,20 +544,41 @@ CreateThread(function()
                         end
                     end
                 end
+                poolIndex = poolIndex + 1
+                processed = processed + 1
             end
-            
-            cachedVehicles = tempCache
+
+            -- Ciclo completo: troca atômica de ponteiros em O(1)
+            if poolIndex > #pool then
+                activeCache = backBuffer
+                -- Inverte os papéis: o próximo ciclo escreve no outro buffer
+                if backBuffer == bufferB then
+                    backBuffer = bufferA
+                else
+                    backBuffer = bufferB
+                end
+                scanInProgress = false
+            end
+
+            -- Se ainda há chunks para processar, cede o frame e retorna imediatamente
+            if scanInProgress then
+                Wait(0)
+            else
+                Wait(1000)
+            end
+        else
+            Wait(1000)
         end
-        Wait(1000)
     end
 end)
 
--- Render Thread (Tick: O(K) onde K = tamanho de cachedVehicles)
+-- Render Thread (Tick: O(K) onde K = tamanho de activeCache, leitura sempre estável)
 CreateThread(function()
     while true do
         if IsControlPressed(0, 311) then -- Tecla K
-            for i = 1, #cachedVehicles do
-                local data = cachedVehicles[i]
+            local renderCache = activeCache -- Cópia local do ponteiro para atomicidade
+            for i = 1, #renderCache do
+                local data = renderCache[i]
                 local veh = data.entity
                 if DoesEntityExist(veh) then
                     local vehPos = GetEntityCoords(veh)
