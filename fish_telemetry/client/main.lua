@@ -224,20 +224,33 @@ end
 -- A inversão algébrica substitui math.abs(A-B)/max(|B|,1) > ε por math.abs(A-B) > ε * max(|B|,1)
 -- Isto elimina a instrução FDIV (10-40 ciclos) em favor de FMUL (1-3 ciclos)
 local function checkDelta(key, newVal, threshold)
-    threshold = threshold or TELEMETRY_EPSILON
     local oldVal = lastTelemetryState[key]
-    if oldVal == nil then
-        -- Primeiro envio: sempre incluir no delta
+    
+    -- 1. Mitigação de IPC Flood O(N):
+    -- Se a propriedade está nula na engine de física E no Shadow DOM,
+    -- o estado é idêntico e indefinido. Não aloque banda de rede/IPC.
+    if newVal == nil and oldVal == nil then 
+        return false 
+    end
+    
+    -- 2. Type Transition & Cache Invalidation:
+    -- Se ocorreu uma transição de Floating Point para Nil (ou vice-versa),
+    -- o estado sofreu mutação absoluta. Grave a transição na cache e notifique o CEF.
+    if newVal == nil or oldVal == nil then
         deltaPayload[key] = newVal
         lastTelemetryState[key] = newVal
         return true
     end
-    -- Inversão Algébrica: A > ε * B em vez de A/B > ε (poupa FDIV)
-    if math.abs(newVal - oldVal) > (threshold * math.max(math.abs(oldVal), 1)) then
+    
+    -- 3. Inversão Algébrica FPU (Zero-Allocation):
+    -- Ambos os valores são provados como numéricos. O processador está seguro.
+    threshold = threshold or TELEMETRY_EPSILON
+    if math.abs(newVal - oldVal) > (threshold * math.max(math.abs(oldVal), 1.0)) then
         deltaPayload[key] = newVal
         lastTelemetryState[key] = newVal
         return true
     end
+    
     return false
 end
 
