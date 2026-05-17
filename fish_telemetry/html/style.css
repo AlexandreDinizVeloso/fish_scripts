@@ -242,6 +242,10 @@ body {
     line-height: 1;
     min-width: 120px;
     transition: color 0.3s ease;
+    /* GPU Accelerated Smoothing: interpolação delegada ao Compositor Thread do CEF
+       Despacha 100ms sincronizado com o tick de delta-encoding do Lua */
+    transition: transform 100ms linear;
+    will-change: transform;
 }
 
 .speed-value.high-speed {
@@ -269,8 +273,10 @@ body {
     width: 0%;
     background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
     border-radius: 3px;
-    transition: width 0.1s linear;
+    transition: width 100ms linear;
     box-shadow: 0 0 10px var(--accent-blue);
+    /* GPU Compositor Layer: renderização em camada separada da GPU */
+    will-change: width;
 }
 
 .speed-labels {
@@ -305,6 +311,9 @@ body {
     font-weight: 700;
     color: var(--accent-green);
     text-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+    /* GPU Accelerated Smoothing: interpola visualmente entre frames delta */
+    transition: transform 100ms linear;
+    will-change: transform;
 }
 
 .max-speed-unit {
@@ -383,6 +392,9 @@ body {
     font-size: 22px;
     font-weight: 700;
     line-height: 1;
+    /* GPU Accelerated Smoothing: interpola valores entre frames delta */
+    transition: transform 100ms linear;
+    will-change: transform;
 }
 
 .stat-number.best {

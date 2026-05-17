@@ -216,6 +216,46 @@ local function CalculateLateralGForce(vehicle)
 end
 
 -- ============================================================
+-- Delta-Encoding: Shadow DOM e Payload Pré-Alocado para IPC Zero-Allocation
+-- ============================================================
+local lastTelemetryState = {}     -- Shadow DOM: armazena último estado enviado via IPC
+local TELEMETRY_EPSILON = 0.01    -- ε = 1% threshold mínimo para mutação de campo numérico
+
+-- Payload delta pré-alocado (NUNCA recriado dentro do loop — Zero-Allocation)
+local deltaPayload = { action = 'liveTelemetry' }
+
+-- Limpeza de chaves mortas após despacho: anula ponteiros sem destruir a matriz base
+local function ResetDeltaPayload()
+    for k in pairs(deltaPayload) do
+        if k ~= 'action' then
+            deltaPayload[k] = nil  -- Anula referência em O(1), preserva alocação da tabela
+        end
+    end
+end
+
+-- checkDelta: compara newVal contra oldVal com inversão algébrica (FMUL sobre FDIV)
+-- retorna true se o valor mudou além do threshold ε
+-- A inversão algébrica substitui math.abs(A-B)/max(|B|,1) > ε por math.abs(A-B) > ε * max(|B|,1)
+-- Isto elimina a instrução FDIV (10-40 ciclos) em favor de FMUL (1-3 ciclos)
+local function checkDelta(key, newVal, threshold)
+    threshold = threshold or TELEMETRY_EPSILON
+    local oldVal = lastTelemetryState[key]
+    if oldVal == nil then
+        -- Primeiro envio: sempre incluir no delta
+        deltaPayload[key] = newVal
+        lastTelemetryState[key] = newVal
+        return true
+    end
+    -- Inversão Algébrica: A > ε * B em vez de A/B > ε (poupa FDIV)
+    if math.abs(newVal - oldVal) > (threshold * math.max(math.abs(oldVal), 1)) then
+        deltaPayload[key] = newVal
+        lastTelemetryState[key] = newVal
+        return true
+    end
+    return false
+end
+
+-- ============================================================
 -- Telemetry Sampling Loop
 -- ============================================================
 
@@ -353,22 +393,37 @@ local function StartSampling(vehicle)
                 end
             end
 
-            -- Push live data to NUI every 100ms
+            -- Delta-Encoding: apenas campos com mutação além de ε são despachados via IPC
+            -- Payload deltaPayload é pré-alocado (Zero-Allocation), anulado após despacho
             if isNuiOpen then
-                SendNUIMessage({
-                    action    = 'liveTelemetry',
-                    speed     = speedKMH,
-                    maxSpeed  = currentVersion.maxSpeed,
-                    gForce    = gForce,
-                    time0_100 = currentVersion.time0_100,
-                    time0_200 = currentVersion.time0_200,
-                    time100_0 = currentVersion.time100_0,
-                    dist100_0 = currentVersion.dist100_0,
-                    time200_0 = currentVersion.time200_0,
-                    dist200_0 = currentVersion.dist200_0,
-                    bestGForce = currentVersion.bestGForce,
-                    isRecording = true
-                })
+                -- checkDelta usa inversão algébrica FMUL (poupa FDIV) e threshold ε = 1%
+                local changed = false
+
+                if checkDelta('speed', speedKMH) then changed = true end
+                if checkDelta('maxSpeed', currentVersion.maxSpeed) then changed = true end
+                if checkDelta('gForce', gForce, 0.05) then changed = true end          -- ε = 5% (gForce é mais ruidoso)
+                if checkDelta('time0_100', currentVersion.time0_100) then changed = true end
+                if checkDelta('time0_200', currentVersion.time0_200) then changed = true end
+                if checkDelta('time100_0', currentVersion.time100_0) then changed = true end
+                if checkDelta('dist100_0', currentVersion.dist100_0) then changed = true end
+                if checkDelta('time200_0', currentVersion.time200_0) then changed = true end
+                if checkDelta('dist200_0', currentVersion.dist200_0) then changed = true end
+                if checkDelta('bestGForce', currentVersion.bestGForce) then changed = true end
+
+                -- Campo booleano isRecording: envia no primeiro frame apenas
+                if lastTelemetryState.isRecording ~= true then
+                    deltaPayload.isRecording = true
+                    lastTelemetryState.isRecording = true
+                    changed = true
+                end
+
+                -- Só despacha via IPC se houver ao menos uma mutação significativa
+                if changed then
+                    SendNUIMessage(deltaPayload)
+                end
+
+                -- Reset das chaves mortas: anula ponteiros em O(1) sem realocar a tabela
+                ResetDeltaPayload()
             end
 
             Citizen.Wait(SAMPLE_INTERVAL)
