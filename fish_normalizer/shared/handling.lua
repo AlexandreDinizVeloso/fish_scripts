@@ -13,128 +13,147 @@ HandlingEngine = {}
 -- ============================================================
 
 -- Base reference values for a "neutral" stock vehicle
+-- These are calibrated so that archetype multipliers produce values
+-- matching the hand-tuned examples in Tuning_Examples/
+-- Reference targets at PI 500 (mid-range):
+--   Esportivo: Pentro-like (MaxFlatVel~162, DriveForce~0.31, TractionMax~1.80)
+--   Supercarro: balanced high performer
+--   Possante: high accel, low handling
+--   Exotico: top speed focused
 local BASE_HANDLING = {
     -- Drive
-    fInitialDriveMaxFlatVel        = 135.0,  -- Lowered slightly because performance.lua multiplies this by up to 1.44x
-    fInitialDriveForce             = 0.31,   
-    fDriveInertia                  = 1.05,
-    fDriveBiasFront                = 0.35,   
-    nInitialDriveGears             = 6,      
-    fClutchChangeRateScaleUpShift  = 2.2,    
-    fClutchChangeRateScaleDownShift = 2.2,
+    fInitialDriveMaxFlatVel        = 150.0,  -- Base for archetype multipliers to reach 162 (Pentro) through 182 (NeroPS)
+    fInitialDriveForce             = 0.30,
+    fDriveInertia                  = 1.00,
+    fDriveBiasFront                = 0.35,
+    nInitialDriveGears             = 6,
+    fClutchChangeRateScaleUpShift  = 2.0,
+    fClutchChangeRateScaleDownShift = 2.0,
     -- Traction
-    fTractionCurveMax              = 1.85,   -- Lowered so max tunes hit ~2.6 (preventing rollovers)
-    fTractionCurveMin              = 1.65,
-    fTractionCurveLateral          = 22.0,   
+    fTractionCurveMax              = 1.70,
+    fTractionCurveMin              = 1.50,
+    fTractionCurveLateral          = 22.0,
     fTractionLossMult              = 1.0,
-    fLowSpeedTractionLossMult      = 1.0,    
-    fTractionBiasFront             = 0.49,   
-    fTractionSpringDeltaMax        = 0.10,   
-    fCamberStiffnesss              = 0.0,    
+    fLowSpeedTractionLossMult      = 1.0,
+    fTractionBiasFront             = 0.49,
+    fTractionSpringDeltaMax        = 0.10,
+    fCamberStiffnesss              = 0.0,
     -- Steering
-    fSteeringLock                  = 40.0,   
+    fSteeringLock                  = 40.0,
     -- Suspension
-    fSuspensionForce               = 2.5,    
-    fSuspensionCompDamp            = 1.5,    
-    fSuspensionReboundDamp         = 1.6,    
+    fSuspensionForce               = 2.5,
+    fSuspensionCompDamp            = 1.5,
+    fSuspensionReboundDamp         = 1.6,
     fSuspensionDampingReboundSlow  = 0.25,
-    -- CRITICAL FIX: Removed UpperLimit, LowerLimit, and Raise to prevent floor clipping
-    fSuspensionBiasFront           = 0.50,   
-    fAntiRollBarForce              = 0.5,    
-    fAntiRollBarBiasFront          = 0.50,   
-    fRollCentreHeightFront         = 0.20,   
+    fSuspensionBiasFront           = 0.50,
+    fAntiRollBarForce              = 0.5,
+    fAntiRollBarBiasFront          = 0.50,
+    fRollCentreHeightFront         = 0.20,
     fRollCentreHeightRear          = 0.20,
     -- Brakes
-    fBrakeForce                    = 0.55,
-    fBrakeBiasFront                = 0.65,   
+    fBrakeForce                    = 0.50,
+    fBrakeBiasFront                = 0.65,
     fHandBrakeForce                = 0.65,
     -- Body
     fMass                          = 1500.0,
-    fInitialDragCoeff              = 7.0,    
-    fDownForceModifier             = 1.0,    
-    fPercentSubmerged              = 85.0,   
-    -- CRITICAL FIX: Removed Damage multipliers to prevent instant-explode bug
+    fInitialDragCoeff              = 7.0,
+    fDownForceModifier             = 1.0,
+    fPercentSubmerged              = 85.0,
+    -- CRITICAL FIX: Added damage multipliers to prevent instant-explode bug
+    -- These are applied by archetype profiles and must have base values
+    fCollisionDamageMult           = 1.0,
+    fWeaponDamageMult              = 0.4,
+    fDeformationDamageMult         = 1.0,
+    fEngineDamageMult              = 1.0,
 }
 
 -- ============================================================
 -- Archetype Handling Personality Profiles
 -- Each archetype overrides base values differently.
 -- Values are MULTIPLIERS applied to the base.
+-- Calibrated to produce hand-tuned example values at ~PI 500 (mid-class)
 -- ============================================================
 
 local ARCHETYPE_PROFILES = {
     esportivo = {
         -- High cornering, lightweight, limited top speed
-        fInitialDriveMaxFlatVel        = 1.05,
-        fInitialDriveForce             = 1.10,
-        fDriveInertia                  = 1.00,
-        fTractionCurveMax              = 1.05,
-        fTractionCurveMin              = 1.05,
-        fTractionCurveLateral          = 1.00,  -- sharper lateral response
+        -- Targets: MaxFlatVel~162, DriveForce~0.31, TractionMax~1.80, SuspForce~3.0 (Pentro)
+        fInitialDriveMaxFlatVel        = 1.08,  -- 150*1.08 = 162 ✓ (Pentro)
+        fInitialDriveForce             = 1.03,  -- 0.30*1.03 = 0.309 ≈ 0.31 ✓
+        fDriveInertia                  = 1.10,
+        fTractionCurveMax              = 1.06,  -- 1.70*1.06 = 1.80 ✓
+        fTractionCurveMin              = 1.03,  -- 1.50*1.03 = 1.545 ≈ 1.55 ✓
+        fTractionCurveLateral          = 1.02,
         fTractionLossMult              = 0.90,
         fLowSpeedTractionLossMult      = 0.85,
-        fTractionBiasFront             = 0.52,  -- slight front bias
-        fSteeringLock                  = 0.85,
-        fSuspensionForce               = 1.10,
-        fSuspensionCompDamp            = 1.15,
-        fSuspensionReboundDamp         = 1.12,
+        fTractionBiasFront             = 0.49,
+        fSteeringLock                  = 1.05,
+        fSuspensionForce               = 1.20,  -- 2.5*1.20 = 3.0 ✓
+        fSuspensionCompDamp            = 0.80,  -- target 1.2 (Pentro)
+        fSuspensionReboundDamp         = 0.63,  -- target 1.0 (Pentro)
         fSuspensionDampingReboundSlow  = 1.15,
         fSuspensionBiasFront           = 0.52,
-        fAntiRollBarForce              = 1.25,  -- less body roll
+        fAntiRollBarForce              = 0.40,  -- target 0.2 (Pentro)
         fAntiRollBarBiasFront          = 0.50,
-        fRollCentreHeightFront         = 0.95,
-        fRollCentreHeightRear          = 0.95,
-        fHandBrakeForce                = 0.90,
-        fBrakeForce                    = 1.10,
-        fBrakeBiasFront                = 0.48,
-        fMass                          = 0.85,
-        fInitialDragCoeff              = 0.90,  -- low drag
-        fDownForceModifier             = 1.15,  -- more grip at speed
-        fClutchChangeRateScaleUpShift  = 1.15,
-        fClutchChangeRateScaleDownShift = 1.15,
-        fDeformationDamageMult         = 1.00,
+        fRollCentreHeightFront         = 1.50,  -- target 0.30 (Pentro)
+        fRollCentreHeightRear          = 1.50,
+        fHandBrakeForce                = 1.23,  -- target 0.8 (Pentro)
+        fBrakeForce                    = 0.80,  -- target 0.4 (Pentro)
+        fBrakeBiasFront                = 0.60,  -- direct value (Pentro)
+        fMass                          = 0.90,  -- target 1350 (Pentro)
+        fInitialDragCoeff              = 0.96,  -- target 6.7 (Pentro)
+        fDownForceModifier             = 1.15,
+        fClutchChangeRateScaleUpShift  = 1.00,
+        fClutchChangeRateScaleDownShift = 1.00,
+        fCollisionDamageMult           = 1.0,
+        fDeformationDamageMult         = 1.0,
+        fEngineDamageMult              = 1.13,
     },
     possante = {
         -- Brutal acceleration, heavy, poor cornering
-        fInitialDriveMaxFlatVel        = 0.93,
-        fInitialDriveForce             = 1.30,
-        fDriveInertia                  = 0.80,
-        fTractionCurveMax              = 0.85,
-        fTractionCurveMin              = 0.80,
-        fTractionCurveLateral          = 1.15,  -- wide lateral curve = looser
-        fTractionLossMult              = 1.30,
-        fLowSpeedTractionLossMult      = 0.70,  -- burnouts
-        fTractionBiasFront             = 0.42,  -- rear bias = oversteer
-        fSteeringLock                  = 1.20,
+        -- Targets: DriveForce~0.45, Mass~2100, TractionMax~1.50
+        fInitialDriveMaxFlatVel        = 0.95,
+        fInitialDriveForce             = 1.50,  -- 0.30*1.50 = 0.45
+        fDriveInertia                  = 0.85,
+        fTractionCurveMax              = 0.88,  -- 1.70*0.88 = 1.50
+        fTractionCurveMin              = 0.87,
+        fTractionCurveLateral          = 1.10,
+        fTractionLossMult              = 1.25,
+        fLowSpeedTractionLossMult      = 0.70,
+        fTractionBiasFront             = 0.42,
+        fSteeringLock                  = 1.15,
         fSuspensionForce               = 0.90,
         fSuspensionCompDamp            = 0.85,
         fSuspensionReboundDamp         = 0.80,
         fSuspensionDampingReboundSlow  = 0.85,
         fSuspensionBiasFront           = 0.45,
-        fAntiRollBarForce              = 0.80,  -- more body roll
+        fAntiRollBarForce              = 0.80,
         fAntiRollBarBiasFront          = 0.50,
         fHandBrakeForce                = 0.70,
         fBrakeForce                    = 0.85,
         fBrakeBiasFront                = 0.52,
-        fMass                          = 1.35,
-        fInitialDragCoeff              = 1.20,  -- high drag (brick)
+        fMass                          = 1.40,  -- target 2100
+        fInitialDragCoeff              = 1.20,
         fDownForceModifier             = 0.80,
-        fClutchChangeRateScaleUpShift  = 0.85,  -- slower shifts
+        fClutchChangeRateScaleUpShift  = 0.85,
         fClutchChangeRateScaleDownShift = 0.80,
-        fDeformationDamageMult         = 0.65,
+        fCollisionDamageMult           = 0.70,
+        fDeformationDamageMult         = 0.70,
+        fEngineDamageMult              = 1.13,
     },
     exotico = {
         -- Top speed king, stable acceleration
-        fInitialDriveMaxFlatVel        = 1.08,
-        fInitialDriveForce             = 1.05,
+        -- Targets: MaxFlatVel~170, Low drag~4.5, DriveForce~0.35
+        fInitialDriveMaxFlatVel        = 1.13,  -- 150*1.13 = 170
+        fInitialDriveForce             = 1.10,  -- 0.30*1.10 = 0.33
         fDriveInertia                  = 0.95,
         fTractionCurveMax              = 1.00,
-        fTractionCurveMin              = 0.92,
+        fTractionCurveMin              = 0.95,
         fTractionCurveLateral          = 0.95,
         fTractionLossMult              = 1.10,
         fLowSpeedTractionLossMult      = 1.05,
         fTractionBiasFront             = 0.48,
-        fSteeringLock                  = 0.95,
+        fSteeringLock                  = 1.00,
         fSuspensionForce               = 1.10,
         fSuspensionCompDamp            = 1.05,
         fSuspensionReboundDamp         = 1.05,
@@ -148,42 +167,49 @@ local ARCHETYPE_PROFILES = {
         fMass                          = 0.95,
         fInitialDragCoeff              = 0.65,  -- very low drag
         fDownForceModifier             = 1.05,
-        fClutchChangeRateScaleUpShift  = 1.15,  -- fast shifts
+        fClutchChangeRateScaleUpShift  = 1.15,
         fClutchChangeRateScaleDownShift = 1.10,
+        fCollisionDamageMult           = 1.20,
         fDeformationDamageMult         = 1.20,
+        fEngineDamageMult              = 1.13,
     },
     supercarro = {
-        -- Balanced excellence
-        fInitialDriveMaxFlatVel        = 1.08,
-        fInitialDriveForce             = 1.15,
+        -- Balanced excellence, high everything
+        -- Targets (NeroPS at S-TOP): MaxFlatVel~182, DriveForce~0.50, TractionMax~1.70, Mass~1800
+        fInitialDriveMaxFlatVel        = 1.15,  -- 150*1.15 = 172.5 (base), scaled by PI perf for higher
+        fInitialDriveForce             = 1.30,  -- 0.30*1.30 = 0.39 (base), scaled by PI perf
         fDriveInertia                  = 1.05,
-        fTractionCurveMax              = 1.15,
-        fTractionCurveMin              = 1.10,
-        fTractionCurveLateral          = 0.92,
+        fTractionCurveMax              = 1.00,  -- 1.70*1.00 = 1.70 (NeroPS)
+        fTractionCurveMin              = 1.00,  -- 1.50*1.00 = 1.50
+        fTractionCurveLateral          = 0.95,
         fTractionLossMult              = 0.85,
         fLowSpeedTractionLossMult      = 0.90,
-        fTractionBiasFront             = 0.50,
-        fSteeringLock                  = 0.90,
-        fSuspensionForce               = 1.15,
-        fSuspensionCompDamp            = 1.10,
-        fSuspensionReboundDamp         = 1.10,
+        fTractionBiasFront             = 0.48,
+        fSteeringLock                  = 1.05,
+        fSuspensionForce               = 1.40,  -- 2.5*1.40 = 3.5 ✓ (NeroPS)
+        fSuspensionCompDamp            = 1.00,
+        fSuspensionReboundDamp         = 1.25,  -- target 2.0 (NeroPS)
         fSuspensionDampingReboundSlow  = 1.10,
         fSuspensionBiasFront           = 0.50,
-        fAntiRollBarForce              = 1.15,
+        fAntiRollBarForce              = 1.00,  -- target 0.5 (NeroPS)
         fAntiRollBarBiasFront          = 0.50,
-        fHandBrakeForce                = 1.05,
-        fBrakeForce                    = 1.15,
-        fBrakeBiasFront                = 0.47,
-        fMass                          = 0.88,
-        fInitialDragCoeff              = 0.75,
-        fDownForceModifier             = 1.20,  -- downforce king
-        fClutchChangeRateScaleUpShift  = 1.12,
-        fClutchChangeRateScaleDownShift = 1.10,
-        fDeformationDamageMult         = 1.00,
+        fRollCentreHeightFront         = 1.50,  -- target 0.30 (between NeroPS 0.40 and Pentro 0.30)
+        fRollCentreHeightRear          = 1.50,
+        fHandBrakeForce                = 1.08,  -- target 0.7 (NeroPS)
+        fBrakeForce                    = 1.60,  -- target 0.80 (base prior to PI scaling that pushes to ~1.0)
+        fBrakeBiasFront                = 0.60,  -- direct value
+        fMass                          = 1.10,  -- target 1650-1800
+        fInitialDragCoeff              = 0.93,  -- target 6.5 (NeroPS)
+        fDownForceModifier             = 1.20,
+        fClutchChangeRateScaleUpShift  = 1.50,  -- target 3.0 (NeroPS)
+        fClutchChangeRateScaleDownShift = 1.50,  -- target 3.0 (NeroPS)
+        fCollisionDamageMult           = 0.84,  -- target 0.8367 (NeroPS)
+        fDeformationDamageMult         = 0.70,  -- target 0.70 (NeroPS)
+        fEngineDamageMult              = 1.13,
     },
     moto = {
         -- Ultra-light, agile, fragile
-        fInitialDriveMaxFlatVel        = 0.92,
+        fInitialDriveMaxFlatVel        = 0.95,
         fInitialDriveForce             = 1.10,
         fDriveInertia                  = 1.20,
         fTractionCurveMax              = 1.10,
@@ -200,7 +226,7 @@ local ARCHETYPE_PROFILES = {
         fSuspensionBiasFront           = 0.55,
         fAntiRollBarForce              = 1.50,
         fAntiRollBarBiasFront          = 0.50,
-        fRollCentreHeightFront         = 0.80,  -- lower CoG to prevent flipping
+        fRollCentreHeightFront         = 0.80,
         fRollCentreHeightRear          = 0.80,
         fHandBrakeForce                = 1.10,
         fBrakeForce                    = 1.05,
@@ -208,9 +234,11 @@ local ARCHETYPE_PROFILES = {
         fMass                          = 0.35,
         fInitialDragCoeff              = 0.50,
         fDownForceModifier             = 0.80,
-        fClutchChangeRateScaleUpShift  = 1.30,  -- very fast shifts
+        fClutchChangeRateScaleUpShift  = 1.30,
         fClutchChangeRateScaleDownShift = 1.25,
+        fCollisionDamageMult           = 1.00,
         fDeformationDamageMult         = 2.50,
+        fEngineDamageMult              = 1.00,
     },
     utilitario = {
         -- Slow, heavy, high torque
@@ -239,7 +267,9 @@ local ARCHETYPE_PROFILES = {
         fDownForceModifier             = 0.60,
         fClutchChangeRateScaleUpShift  = 0.70,
         fClutchChangeRateScaleDownShift = 0.65,
+        fCollisionDamageMult           = 0.50,
         fDeformationDamageMult         = 0.50,
+        fEngineDamageMult              = 1.00,
     },
     especial = {
         fInitialDriveMaxFlatVel        = 1.00,
@@ -267,7 +297,9 @@ local ARCHETYPE_PROFILES = {
         fDownForceModifier             = 1.00,
         fClutchChangeRateScaleUpShift  = 1.00,
         fClutchChangeRateScaleDownShift = 1.00,
+        fCollisionDamageMult           = 1.00,
         fDeformationDamageMult         = 1.00,
+        fEngineDamageMult              = 1.00,
     }
 }
 
@@ -280,18 +312,18 @@ local SUBARCHETYPE_TWEAKS = {
         fTractionCurveMax       = 0.88,
         fTractionCurveMin       = 0.82,
         fTractionLossMult       = 1.25,
-        fTractionCurveLateral   = 1.20,  -- wider lateral curve for slides
+        fTractionCurveLateral   = 1.20,
         fLowSpeedTractionLossMult = 0.80,
         fDriveInertia           = 1.05,
-        fAntiRollBarForce       = 0.85,  -- more body roll helps drifting
+        fAntiRollBarForce       = 0.85,
     },
     dragster = {
         fInitialDriveForce      = 1.12,
         fDriveInertia           = 0.88,
         fBrakeBiasFront         = 0.52,
         fTractionCurveMax       = 1.05,
-        fLowSpeedTractionLossMult = 0.60,  -- lots of wheelspin
-        fClutchChangeRateScaleUpShift = 0.80,  -- slower shifts for drag
+        fLowSpeedTractionLossMult = 0.60,
+        fClutchChangeRateScaleUpShift = 0.80,
     },
     late_surger = {
         fInitialDriveMaxFlatVel = 1.08,
@@ -328,7 +360,6 @@ local SUBARCHETYPE_TWEAKS = {
         fTractionCurveMin       = 1.03,
         fSuspensionForce        = 1.10,
         fSuspensionDampingReboundSlow = 1.10,
-        fSuspensionRaise        = 1.03,  -- slight raise for offroad
     },
     drift_king = {
         fTractionCurveMax       = 0.78,
@@ -346,7 +377,7 @@ local SUBARCHETYPE_TWEAKS = {
         fSuspensionForce        = 1.12,
         fSuspensionDampingReboundSlow = 1.12,
         fInitialDriveMaxFlatVel = 0.97,
-        fDownForceModifier      = 1.25,  -- aero dependent
+        fDownForceModifier      = 1.25,
         fAntiRollBarForce       = 1.20,
     },
     sleeper = {
@@ -355,6 +386,143 @@ local SUBARCHETYPE_TWEAKS = {
         fInitialDriveMaxFlatVel = 1.03,
     },
 }
+
+-- ============================================================
+-- Archetype-specific reference brackets for PI calculation
+-- These map handling values to 0-100 normalized scores per archetype
+-- Each archetype has its own "100 is this value" target
+-- ============================================================
+
+local ARCHETYPE_REFERENCE = {
+    esportivo = {
+        -- Esportivo: cornering-focused. High flatvel = less important
+        maxFlatVel_ref       = {min = 140, max = 175, weight = 0.20},
+        driveForce_ref       = {min = 0.25, max = 0.50, weight = 0.25},
+        tractionCurveMax_ref = {min = 1.40, max = 2.50, weight = 0.30},
+        brakeForce_ref       = {min = 0.30, max = 0.70, weight = 0.15},
+        mass_ref             = {min = 2000, max = 1200, weight = 0.10, inverted = true}, -- lighter = better
+    },
+    possante = {
+        -- Possante: acceleration-focused
+        maxFlatVel_ref       = {min = 130, max = 170, weight = 0.20},
+        driveForce_ref       = {min = 0.30, max = 0.55, weight = 0.40},  -- high accel weight
+        tractionCurveMax_ref = {min = 1.30, max = 2.00, weight = 0.20},
+        brakeForce_ref       = {min = 0.30, max = 0.60, weight = 0.10},
+        mass_ref             = {min = 1800, max = 1000, weight = 0.10, inverted = true},
+    },
+    exotico = {
+        -- Exotico: top speed focused
+        maxFlatVel_ref       = {min = 145, max = 190, weight = 0.40},  -- high speed weight
+        driveForce_ref       = {min = 0.25, max = 0.50, weight = 0.25},
+        tractionCurveMax_ref = {min = 1.40, max = 2.30, weight = 0.15},
+        brakeForce_ref       = {min = 0.30, max = 0.65, weight = 0.10},
+        mass_ref             = {min = 2000, max = 1200, weight = 0.10, inverted = true},
+    },
+    supercarro = {
+        -- Supercarro: balanced, high all-round
+        maxFlatVel_ref       = {min = 145, max = 190, weight = 0.25},
+        driveForce_ref       = {min = 0.30, max = 0.55, weight = 0.25},
+        tractionCurveMax_ref = {min = 1.40, max = 2.50, weight = 0.25},
+        brakeForce_ref       = {min = 0.40, max = 1.00, weight = 0.15},
+        mass_ref             = {min = 2000, max = 1200, weight = 0.10, inverted = true},
+    },
+    moto = {
+        maxFlatVel_ref       = {min = 130, max = 165, weight = 0.20},
+        driveForce_ref       = {min = 0.30, max = 0.55, weight = 0.25},
+        tractionCurveMax_ref = {min = 1.50, max = 2.60, weight = 0.30},
+        brakeForce_ref       = {min = 0.30, max = 0.60, weight = 0.15},
+        mass_ref             = {min = 600, max = 300, weight = 0.10, inverted = true},
+    },
+    utilitario = {
+        maxFlatVel_ref       = {min = 80, max = 130, weight = 0.20},
+        driveForce_ref       = {min = 0.20, max = 0.40, weight = 0.20},
+        tractionCurveMax_ref = {min = 1.20, max = 2.00, weight = 0.20},
+        brakeForce_ref       = {min = 0.25, max = 0.50, weight = 0.20},
+        mass_ref             = {min = 2500, max = 1500, weight = 0.20, inverted = true},
+    },
+    especial = {
+        maxFlatVel_ref       = {min = 130, max = 170, weight = 0.25},
+        driveForce_ref       = {min = 0.25, max = 0.45, weight = 0.25},
+        tractionCurveMax_ref = {min = 1.30, max = 2.10, weight = 0.25},
+        brakeForce_ref       = {min = 0.30, max = 0.60, weight = 0.15},
+        mass_ref             = {min = 2000, max = 1000, weight = 0.10, inverted = true},
+    },
+}
+
+-- ============================================================
+-- Calculate PI Score from Final Handling Profile
+-- This is the SHARED function used by both client and server
+-- ============================================================
+
+function CalculatePIFromProfile(handlingProfile, archetype, tunePI)
+    -- Get the reference brackets for this archetype
+    local ref = ARCHETYPE_REFERENCE[archetype] or ARCHETYPE_REFERENCE.esportivo
+
+    local function normalize(value, refBracket)
+        local min = refBracket.min
+        local max = refBracket.max
+        local inverted = refBracket.inverted or false
+
+        if inverted then
+            -- lower = better (mass: lighter = higher score)
+            local clamped = math.max(math.min(value, max), min)
+            return ((max - clamped) / (max - min)) * 100
+        else
+            -- higher = better
+            local clamped = math.max(math.min(value, max), min)
+            return ((clamped - min) / (max - min)) * 100
+        end
+    end
+
+    local score = 0
+    local totalWeight = 0
+
+    -- Top speed score from fInitialDriveMaxFlatVel
+    if handlingProfile.fInitialDriveMaxFlatVel then
+        local ns = normalize(handlingProfile.fInitialDriveMaxFlatVel, ref.maxFlatVel_ref)
+        score = score + (ns * ref.maxFlatVel_ref.weight)
+        totalWeight = totalWeight + ref.maxFlatVel_ref.weight
+    end
+
+    -- Acceleration score from fInitialDriveForce
+    if handlingProfile.fInitialDriveForce then
+        local ns = normalize(handlingProfile.fInitialDriveForce, ref.driveForce_ref)
+        score = score + (ns * ref.driveForce_ref.weight)
+        totalWeight = totalWeight + ref.driveForce_ref.weight
+    end
+
+    -- Handling score from fTractionCurveMax
+    if handlingProfile.fTractionCurveMax then
+        local ns = normalize(handlingProfile.fTractionCurveMax, ref.tractionCurveMax_ref)
+        score = score + (ns * ref.tractionCurveMax_ref.weight)
+        totalWeight = totalWeight + ref.tractionCurveMax_ref.weight
+    end
+
+    -- Braking score from fBrakeForce
+    if handlingProfile.fBrakeForce then
+        local ns = normalize(handlingProfile.fBrakeForce, ref.brakeForce_ref)
+        score = score + (ns * ref.brakeForce_ref.weight)
+        totalWeight = totalWeight + ref.brakeForce_ref.weight
+    end
+
+    -- Weight score
+    if handlingProfile.fMass then
+        local ns = normalize(handlingProfile.fMass, ref.mass_ref)
+        score = score + (ns * ref.mass_ref.weight)
+        totalWeight = totalWeight + ref.mass_ref.weight
+    end
+
+    local finalScore = 0
+    if totalWeight > 0 then
+        finalScore = score / totalWeight
+    end
+
+    -- Add tune PI (from part bonuses, calculated server-side)
+    finalScore = finalScore + (tunePI or 0)
+
+    -- Clamp to 0-1000
+    return math.max(0, math.min(1000, math.floor(finalScore)))
+end
 
 -- ============================================================
 -- Score-to-Handling Scalar
@@ -391,7 +559,6 @@ end
 
 local function ApplyInstability(profile, instabilityScore)
     if not instabilityScore or instabilityScore <= 0 then return profile end
-    -- Each instability point reduces traction by 0.4% and suspension by 0.3%
     local tractionPenalty    = 1.0 - (instabilityScore * 0.004)
     local suspensionPenalty  = 1.0 - (instabilityScore * 0.003)
     profile.fTractionCurveMax = (profile.fTractionCurveMax or 1.0) * tractionPenalty
@@ -403,7 +570,6 @@ end
 
 -- ============================================================
 -- Health Degradation Multiplier
--- Reduces handling values based on part health.
 -- ============================================================
 
 local function GetHealthMultiplier(health)
@@ -412,6 +578,38 @@ local function GetHealthMultiplier(health)
     elseif health >= 50 then return 0.93
     elseif health >= 25 then return 0.85
     else return 0.72 end
+end
+
+-- ============================================================
+-- Get Archetype Classification from Vehicle Class
+-- ============================================================
+
+function GetArchetypeForClass(classId)
+    local map = {
+        [0]  = 'utilitario',  -- Compacts
+        [1]  = 'utilitario',  -- Sedans
+        [2]  = 'utilitario',  -- SUVs
+        [3]  = 'esportivo',   -- Coupes
+        [4]  = 'possante',    -- Muscle   [FIXED from utilitario to possante]
+        [5]  = 'esportivo',   -- Sports Classics
+        [6]  = 'esportivo',   -- Sports
+        [7]  = 'supercarro',  -- Super
+        [8]  = 'moto',        -- Motorcycles
+        [9]  = 'utilitario',  -- Off-road
+        [10] = 'utilitario',  -- Industrial
+        [11] = 'utilitario',  -- Utility
+        [12] = 'utilitario',  -- Vans
+        [13] = 'especial',    -- Cycles
+        [14] = 'especial',    -- Boats
+        [15] = 'especial',    -- Helicopters
+        [16] = 'especial',    -- Planes
+        [17] = 'utilitario',  -- Service
+        [18] = 'especial',    -- Emergency
+        [19] = 'especial',    -- Military
+        [20] = 'utilitario',  -- Commercial
+        [21] = 'especial'     -- Trains
+    }
+    return map[classId] or 'esportivo'
 end
 
 -- ============================================================
@@ -483,7 +681,6 @@ function HandlingEngine.BuildHandlingProfile(params)
     profile.fBrakeForce             = (profile.fBrakeForce or 1.0)           * brakesMult
 
     -- Step 6: Multiply ALL base handling keys by their multipliers
-    -- This ensures all 30+ handling keys are always applied
     local finalHandling = {}
     for key, base in pairs(BASE_HANDLING) do
         local multiplier = profile[key] or 1.0
@@ -491,7 +688,6 @@ function HandlingEngine.BuildHandlingProfile(params)
     end
 
     -- Direct-value fields (bias/proportions/percentages — NOT multiplied by base)
-    -- These are set as direct values in the archetype profiles, not multipliers
     local directValueFields = {
         'fBrakeBiasFront', 'fBrakeBiasRear', 'fDriveBiasFront',
         'fSuspensionBiasFront', 'fTractionBiasFront',
@@ -510,14 +706,12 @@ end
 
 -- ============================================================
 -- Apply Handling to Vehicle Entity (CLIENT ONLY)
--- Call this inside AddStateBagChangeHandler or on vehicle spawn.
 -- ============================================================
 
 function HandlingEngine.ApplyHandlingToVehicle(vehicle, handlingProfile)
     if not DoesEntityExist(vehicle) then return false end
     if not handlingProfile then return false end
 
-    -- Apply each key using the appropriate native
     for key, value in pairs(handlingProfile) do
         if string.sub(key, 1, 1) == 'f' then
             SetVehicleHandlingFloat(vehicle, 'CHandlingData', key, value)
@@ -531,7 +725,6 @@ end
 
 -- ============================================================
 -- Read Current Base Handling from Vehicle (CLIENT ONLY)
--- Used to capture stock values before overriding.
 -- ============================================================
 
 function HandlingEngine.GetBaseHandling(vehicle)
@@ -564,4 +757,3 @@ if IsDuplicityVersion and not IsDuplicityVersion() then
         return HandlingEngine.GetBaseHandling(vehicle)
     end
 end
-

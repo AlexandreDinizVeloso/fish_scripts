@@ -13,7 +13,6 @@ AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, 
     if not netId then return end
     local veh = NetworkGetEntityFromNetworkId(netId)
     Citizen.CreateThread(function()
-        -- Wait up to 2s for entity to exist
         local attempts = 0
         while not DoesEntityExist(veh) and attempts < 20 do
             Citizen.Wait(100)
@@ -21,6 +20,7 @@ AddStateBagChangeHandler('fish:handling', nil, function(bagName, key, value, _, 
             attempts = attempts + 1
         end
         if DoesEntityExist(veh) then
+            -- Use the shared ApplyHandlingToVehicle export
             exports['fish_normalizer']:ApplyHandlingToVehicle(veh, value)
         end
     end)
@@ -40,7 +40,9 @@ AddStateBagChangeHandler('fish:score', nil, function(bagName, key, value, _, rep
     end
 end)
 
--- Get vehicle performance stats from handling.meta
+-- ============================================================
+-- Get vehicle performance stats from FiveM natives (for NUI preview)
+-- ============================================================
 function GetVehiclePerformanceStats(vehicle)
     if not DoesEntityExist(vehicle) then return nil end
 
@@ -48,13 +50,11 @@ function GetVehiclePerformanceStats(vehicle)
     local displayName = GetDisplayNameFromVehicleModel(model):lower()
     local className = GetVehicleClass(vehicle)
 
-    -- Use FiveM native handling data
-    local topSpeed = GetVehicleModelMaxSpeed(model) * 3.6 -- convert to km/h
+    local topSpeed = GetVehicleModelMaxSpeed(model) * 3.6
     local accel = GetVehicleModelAcceleration(model)
     local braking = GetVehicleModelMaxBraking(model)
     local traction = GetVehicleModelMaxTraction(model)
 
-    -- Normalize raw values to 0-100 scale
     local normalizedTopSpeed = math.min(100, (topSpeed / 250.0) * 100)
     local normalizedAccel = math.min(100, (accel / 0.55) * 100)
     local normalizedBraking = math.min(100, (braking / 0.85) * 100)
@@ -79,7 +79,9 @@ function GetVehiclePerformanceStats(vehicle)
     }
 end
 
--- Calculate weighted score from normalized stats
+-- ============================================================
+-- Calculate base score from normalized stats (NUI preview)
+-- ============================================================
 function CalculateBaseScore(stats)
     if not stats then return 0 end
 
@@ -89,10 +91,10 @@ function CalculateBaseScore(stats)
     score = score + (stats.normalized.handling * Config.Weights.handling)
     score = score + (stats.normalized.braking * Config.Weights.braking)
 
-    return math.floor(score * 10) -- scale to 0-1000
+    return math.floor(score * 10)
 end
 
--- Apply archetype modifiers to score
+-- Apply archetype modifiers to score (NUI preview)
 function ApplyArchetypeModifiers(baseScore, stats, archetypeKey)
     local archetype = Config.Archetypes[archetypeKey]
     if not archetype then return baseScore, stats end
@@ -103,7 +105,6 @@ function ApplyArchetypeModifiers(baseScore, stats, archetypeKey)
         modifiedStats[k] = v * modifier
     end
 
-    -- Recalculate score with modified stats
     local modifiedScore = 0
     modifiedScore = modifiedScore + (modifiedStats.top_speed * Config.Weights.top_speed)
     modifiedScore = modifiedScore + (modifiedStats.acceleration * Config.Weights.acceleration)
@@ -111,7 +112,6 @@ function ApplyArchetypeModifiers(baseScore, stats, archetypeKey)
     modifiedScore = modifiedScore + (modifiedStats.braking * Config.Weights.braking)
     modifiedScore = math.floor(modifiedScore * 10)
 
-    -- Apply score bias
     local bias = archetype.scoreBias
     modifiedScore = modifiedScore + (bias.top_speed or 0)
     modifiedScore = modifiedScore + (bias.acceleration or 0)
@@ -121,7 +121,7 @@ function ApplyArchetypeModifiers(baseScore, stats, archetypeKey)
     return math.max(0, math.min(1000, modifiedScore)), modifiedStats
 end
 
--- Apply sub-archetype bonuses
+-- Apply sub-archetype bonuses (NUI preview)
 function ApplySubArchetypeBonuses(score, subArchetypeKey)
     local sub = Config.SubArchetypes[subArchetypeKey]
     if not sub then return score end
@@ -141,17 +141,41 @@ function GetRankFromScore(score)
             return rank
         end
     end
-    return Config.Ranks[1] -- default C
+    return Config.Ranks[1]
 end
 
--- Main export: Get vehicle rank
+-- ============================================================
+-- Get vehicle rank (reads from state bag first, falls back to local calc)
+-- ============================================================
 function GetVehicleRank(vehicle)
     if not DoesEntityExist(vehicle) then return nil end
 
+    local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
+
+    -- Try state bag first (server-authoritative)
+    local bagScore = Entity(vehicle).state['fish:score']
+    local bagRank = Entity(vehicle).state['fish:rank']
+    local bagArchetype = Entity(vehicle).state['fish:archetype']
+
+    if bagScore and bagScore > 0 then
+        local rankObj = nil
+        for _, r in ipairs(Config.Ranks) do
+            if r.name == bagRank then rankObj = r; break end
+        end
+        return {
+            rank = rankObj or Config.Ranks[1],
+            score = bagScore,
+            archetype = bagArchetype or 'esportivo',
+            subArchetype = nil,
+            stats = {},
+            rawStats = {}
+        }
+    end
+
+    -- Fallback: calculate locally (should be rare - only for non-normalized vehicles)
     local stats = GetVehiclePerformanceStats(vehicle)
     if not stats then return nil end
 
-    local plate = GetVehicleNumberPlateText(vehicle):gsub('%s+', '')
     local storedData = vehicleData[plate]
     local archetype = 'esportivo'
     local subArchetype = nil
@@ -163,7 +187,6 @@ function GetVehicleRank(vehicle)
         archetype = Config.VehicleClassMap[stats.class] or 'esportivo'
     end
 
-    -- Calculate base first to map the archetype
     local baseScore = CalculateBaseScore(stats)
     local naturalScore, modifiedStats = ApplyArchetypeModifiers(baseScore, stats, archetype)
     
@@ -171,71 +194,11 @@ function GetVehicleRank(vehicle)
         naturalScore = ApplySubArchetypeBonuses(naturalScore, subArchetype)
     end
 
-    -- If the vehicle has an overridden score (class swap), scale the base stats to match it
-    if storedData and storedData.score and storedData.score > 0 and math.abs(storedData.score - naturalScore) > 2 then
-        local ratio = math.min(2.5, storedData.score / math.max(1, naturalScore))
-        modifiedStats.top_speed = math.min(100, modifiedStats.top_speed * ratio)
-        modifiedStats.acceleration = math.min(100, modifiedStats.acceleration * ratio)
-        modifiedStats.handling = math.min(100, modifiedStats.handling * ratio)
-        modifiedStats.braking = math.min(100, modifiedStats.braking * ratio)
-    end
-    
-    -- INJECT REMAP MULTIPLIERS
-    if GetResourceState('fish_remaps') == 'started' then
-        local remapData = exports['fish_remaps']:GetVehicleRemapData(vehicle)
-        if remapData and remapData.finalStats then
-            local rStats = remapData.finalStats
-            local rMult = {
-                top_speed = 0.8 + (rStats.top_speed or 50) / 100 * 0.4,
-                acceleration = 0.8 + (rStats.acceleration or 50) / 100 * 0.4,
-                handling = 0.8 + (rStats.handling or 50) / 100 * 0.4,
-                braking = 0.8 + (rStats.braking or 50) / 100 * 0.4
-            }
-            modifiedStats.top_speed = modifiedStats.top_speed * rMult.top_speed
-            modifiedStats.acceleration = modifiedStats.acceleration * rMult.acceleration
-            modifiedStats.handling = modifiedStats.handling * rMult.handling
-            modifiedStats.braking = modifiedStats.braking * rMult.braking
-        end
-    end
-
-    -- INJECT TUNE BONUSES
-    if GetResourceState('fish_tunes') == 'started' then
-        local tuneData = exports['fish_tunes']:GetVehicleTunes(vehicle)
-        if tuneData and tuneData.bonuses then
-            local tBonus = tuneData.bonuses
-            modifiedStats.top_speed = modifiedStats.top_speed * (1.0 + ((tBonus.top_speed or 0) * 0.25) / 100.0)
-            modifiedStats.acceleration = modifiedStats.acceleration * (1.0 + ((tBonus.acceleration or 0) * 0.25) / 100.0)
-            modifiedStats.handling = modifiedStats.handling * (1.0 + ((tBonus.handling or 0) * 0.25) / 100.0)
-            modifiedStats.braking = modifiedStats.braking * (1.0 + ((tBonus.braking or 0) * 0.25) / 100.0)
-        end
-    end
-
-    -- RECALCULATE FINAL SCORE WITH NEW STATS
-    local finalScore = 0
-    finalScore = finalScore + (modifiedStats.top_speed * Config.Weights.top_speed)
-    finalScore = finalScore + (modifiedStats.acceleration * Config.Weights.acceleration)
-    finalScore = finalScore + (modifiedStats.handling * Config.Weights.handling)
-    finalScore = finalScore + (modifiedStats.braking * Config.Weights.braking)
-    finalScore = math.floor(finalScore * 10)
-
-    -- Add back archetype score bias which was lost during recalculation
-    if Config.Archetypes[archetype] and Config.Archetypes[archetype].scoreBias then
-        local bias = Config.Archetypes[archetype].scoreBias
-        finalScore = finalScore + (bias.top_speed or 0)
-        finalScore = finalScore + (bias.acceleration or 0)
-        finalScore = finalScore + (bias.handling or 0)
-        finalScore = finalScore + (bias.braking or 0)
-    end
-
-    if subArchetype then
-        finalScore = ApplySubArchetypeBonuses(finalScore, subArchetype)
-    end
-
-    local rank = GetRankFromScore(finalScore)
+    local rank = GetRankFromScore(naturalScore)
 
     return {
         rank = rank,
-        score = finalScore,
+        score = naturalScore,
         archetype = archetype,
         subArchetype = subArchetype,
         stats = modifiedStats,
@@ -260,6 +223,8 @@ end
 
 -- Export: Get vehicle score
 function GetVehicleScore(vehicle)
+    local bagScore = Entity(vehicle).state['fish:score']
+    if bagScore and bagScore > 0 then return bagScore end
     local result = GetVehicleRank(vehicle)
     if result then return result.score end
     return 0
@@ -279,7 +244,9 @@ function GetCurrentPlayerVehicle()
     return nil
 end
 
+-- ============================================================
 -- Open the normalization NUI
+-- ============================================================
 function OpenNormalizer()
     local vehicle = GetCurrentPlayerVehicle()
     if not vehicle then
@@ -353,7 +320,6 @@ end
 AddEventHandler('QBCore:Client:OnPlayerLoaded', function()
     Citizen.CreateThread(function()
         Citizen.Wait(1000)
-        -- QBX: check via ace permissions
         TriggerServerEvent('fish_normalizer:checkAdminStatus')
     end)
 end)
@@ -369,7 +335,10 @@ RegisterCommand('normalize', function()
     OpenNormalizer()
 end, false)
 
--- NUI Callback: Close
+-- ============================================================
+-- NUI Callbacks
+-- ============================================================
+
 RegisterNUICallback('close', function(data, cb)
     SetNuiFocus(false, false)
     isNuiOpen = false
@@ -377,7 +346,6 @@ RegisterNUICallback('close', function(data, cb)
     cb('ok')
 end)
 
--- NUI Callback: Preview Stats
 RegisterNUICallback('previewStats', function(data, cb)
     if not currentVehicle then cb('error'); return end
 
@@ -393,7 +361,7 @@ RegisterNUICallback('previewStats', function(data, cb)
         finalScore = ApplySubArchetypeBonuses(finalScore, subArchetype)
     end
 
-    -- If an override score is provided (e.g., from rank override), scale the stats to match
+    -- If an override score is provided, scale stats to match
     if overrideScore and overrideScore ~= finalScore then
         local ratio = overrideScore / math.max(1, finalScore)
         modifiedStats.top_speed = math.min(100, modifiedStats.top_speed * ratio)
@@ -412,7 +380,6 @@ RegisterNUICallback('previewStats', function(data, cb)
     })
 end)
 
--- NUI Callback: Confirm normalization
 RegisterNUICallback('saveData', function(data, cb)
     if not currentVehicle then cb('error'); return end
 
@@ -429,6 +396,7 @@ RegisterNUICallback('saveData', function(data, cb)
     vehicleData[plate].normalizedAt = GetCloudTimeAsInt()
 
     local netId = NetworkGetNetworkIdFromEntity(currentVehicle)
+    -- Send to server for authoritative processing and state bag push
     TriggerServerEvent('fish_normalizer:saveData', plate, vehicleData[plate], netId)
     ShowNotification('~g~Vehicle normalized successfully!')
 
@@ -460,75 +428,74 @@ function ShowNotification(msg)
 end
 
 -- ============================================================
--- Hold K: Show nearby vehicle ratings
--- Performance: 200ms poll, reads state bag first (no calc needed)
+-- Hold K: Show nearby vehicle ratings (reads state bag)
 -- ============================================================
 Citizen.CreateThread(function()
     while true do
         if IsControlPressed(0, 311) then -- K key
-            Citizen.Wait(0)  -- render every frame WHILE held
+            Citizen.Wait(0)
             local ped    = PlayerPedId()
             local pos    = GetEntityCoords(ped)
             local vehicles = GetGamePool('CVehicle')
 
-        for _, veh in ipairs(vehicles) do
-            if DoesEntityExist(veh) then
-                local vehPos = GetEntityCoords(veh)
-                local dist   = #(pos - vehPos)
-                if dist < 40.0 then
-                    local displayScore = nil
-                    local displayRank  = nil
-                    local rankColor    = '#8B8B8B' -- default gray
+            for _, veh in ipairs(vehicles) do
+                if DoesEntityExist(veh) then
+                    local vehPos = GetEntityCoords(veh)
+                    local dist   = #(pos - vehPos)
+                    if dist < 40.0 then
+                        local displayScore = nil
+                        local displayRank  = nil
+                        local rankColor    = '#8B8B8B'
 
-                    -- 1. Try state bag first (synced from server for normalized vehicles)
-                    local bagScore = Entity(veh).state['fish:score']
-                    local bagRank  = Entity(veh).state['fish:rank']
+                        -- Read state bag (server-authoritative)
+                        local bagScore = Entity(veh).state['fish:score']
+                        local bagRank  = Entity(veh).state['fish:rank']
 
-                    if bagScore and bagScore > 0 and bagRank then
-                        displayScore = bagScore
-                        displayRank  = bagRank
-                        -- Find color for this rank
-                        for _, r in ipairs(Config.Ranks) do
-                            if r.name == displayRank then rankColor = r.color; break end
+                        if bagScore and bagScore > 0 and bagRank then
+                            displayScore = bagScore
+                            displayRank  = bagRank
+                            for _, r in ipairs(Config.Ranks) do
+                                if r.name == displayRank then rankColor = r.color; break end
+                            end
+                        else
+                            -- Calculate locally for non-normalized vehicles
+                            local result = GetVehicleRank(veh)
+                            if result and result.score then
+                                displayScore = result.score
+                                displayRank  = result.rank and result.rank.name or '?'
+                                rankColor    = (result.rank and result.rank.color) or '#8B8B8B'
+                            end
                         end
-                    else
-                        -- 2. Calculate locally for any vehicle (raw model stats)
-                        local result = GetVehicleRank(veh)
-                        if result and result.score then
-                            displayScore = result.score
-                            displayRank  = result.rank and result.rank.name or '?'
-                            rankColor    = (result.rank and result.rank.color) or '#8B8B8B'
-                        end
-                    end
 
-                    if displayScore and displayRank then
-                        local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
-                        if onScreen then
-                            local cr = tonumber(rankColor:sub(2,3), 16) or 139
-                            local cg = tonumber(rankColor:sub(4,5), 16) or 139
-                            local cb = tonumber(rankColor:sub(6,7), 16) or 139
-                            SetTextScale(0.38, 0.38)
-                            SetTextFont(4)
-                            SetTextProportional(true)
-                            SetTextColour(cr, cg, cb, 255)
-                            SetTextDropshadow(2, 0, 0, 0, 200)
-                            SetTextEdge(1, 0, 0, 0, 140)
-                            SetTextDropShadow()
-                            SetTextOutline()
-                            SetTextEntry('STRING')
-                            AddTextComponentString(displayRank .. ': ' .. displayScore)
-                            DrawText(screenX, screenY)
+                        if displayScore and displayRank then
+                            local onScreen, screenX, screenY = World3dToScreen2d(vehPos.x, vehPos.y, vehPos.z + 1.5)
+                            if onScreen then
+                                local cr = tonumber(rankColor:sub(2,3), 16) or 139
+                                local cg = tonumber(rankColor:sub(4,5), 16) or 139
+                                local cb = tonumber(rankColor:sub(6,7), 16) or 139
+                                SetTextScale(0.38, 0.38)
+                                SetTextFont(4)
+                                SetTextProportional(true)
+                                SetTextColour(cr, cg, cb, 255)
+                                SetTextDropshadow(2, 0, 0, 0, 200)
+                                SetTextEdge(1, 0, 0, 0, 140)
+                                SetTextDropShadow()
+                                SetTextOutline()
+                                SetTextEntry('STRING')
+                                AddTextComponentString(displayRank .. ': ' .. displayScore)
+                                DrawText(screenX, screenY)
+                            end
                         end
                     end
                 end
             end
-        end
         else
-            Citizen.Wait(200)  -- idle poll when K not held
+            Citizen.Wait(200)
         end
     end
 end)
 
+-- Export archetype modifier lookup
 function GetArchetypeModifier(archetypeKey, statKey)
     local archetype = Config.Archetypes[archetypeKey]
     if archetype and archetype.statModifiers then

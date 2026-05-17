@@ -175,6 +175,7 @@ function ApplyPerformanceModifications(vehicle)
     local finalBraking = cache.fBrakeForce
     local finalTractionMax = cache.fTractionCurveMax
     local finalTractionMin = cache.fTractionCurveMin
+    local finalDrag = cache.fInitialDragCoeff
     
     -- Layer 1: Apply remap multipliers (multiplicative from base)
     finalTopSpeed = finalTopSpeed * remapMult.top_speed
@@ -190,25 +191,20 @@ function ApplyPerformanceModifications(vehicle)
     finalTractionMax = finalTractionMax * (1.0 + (tuneBonus.handling / 100.0))
     finalTractionMin = finalTractionMin * (1.0 + (tuneBonus.handling / 100.0))
     
+    -- FIX: Drag reduction - properly calculated and NOT overwritten
+    -- Reduced drag for top speed tunes (linear decrease from 0 to 30% reduction)
+    local dragReduction = 1.0 - math.min(0.30, (tuneBonus.top_speed / 150.0))
+    finalDrag = cache.fInitialDragCoeff * dragReduction
+    
     -- Apply combined modifications to vehicle handling
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDriveMaxFlatVel", finalTopSpeed)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDriveForce", finalAccel)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fBrakeForce", finalBraking)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMax", finalTractionMax)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMin", finalTractionMin)
-
-    local dragReduction = 1.0 - math.min(0.30, (tuneBonus.top_speed / 150.0))
-    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", cache.fInitialDragCoeff * dragReduction)
-    
-    -- Apply drag reduction if top speed tune is active
-    if tuneBonus.top_speed > 0 then
-        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", cache.fInitialDragCoeff * 0.85)
-    else
-        SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", cache.fInitialDragCoeff)
-    end
+    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", finalDrag)
     
     -- Apply transmission shift speed bonus (from transmission tune parts)
-    -- Higher transmission bonuses = faster shifts
     local shiftBonus = tuneBonus.acceleration or 0
     if shiftBonus > 0 then
         local shiftMult = 1.0 + (shiftBonus / 100.0) 
@@ -229,17 +225,14 @@ function ApplyPerformanceModifications(vehicle)
         end
     end
 
-    local enginePowerBuff = 1.0 + (tuneBonus.acceleration / 250.0) 
-    ModifyVehicleTopSpeed(vehicle, 1.0)
-    SetVehicleEnginePowerMultiplier(vehicle, enginePowerBuff)
-    
-    -- Force physics engine to apply changes
-    ModifyVehicleTopSpeed(vehicle, 1.0)
-    SetVehicleEnginePowerMultiplier(vehicle, 1.0) -- trick for flatvel
+    -- FIX: Engine power buff properly applied and NOT reset
+    -- Acceleration tune now gives a subtle power multiplier
+    local enginePowerBuff = 1.0 + (tuneBonus.acceleration / 300.0)
+    ModifyVehicleTopSpeed(vehicle, enginePowerBuff)
     
     -- Set entity max speed (1.3x factor for handling-to-actual speed difference)
     -- fInitialDriveMaxFlatVel is in mph, convert to m/s
-    SetEntityMaxSpeed(vehicle, (finalTopSpeed * 1.35) / 2.236936)
+    SetEntityMaxSpeed(vehicle, (finalTopSpeed * enginePowerBuff * 1.35) / 2.236936)
     SetVehicleMaxSpeed(vehicle, 0.0)
     
     appliedPlates[plate] = true
