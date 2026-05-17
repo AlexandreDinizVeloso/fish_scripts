@@ -196,6 +196,9 @@ function ApplyPerformanceModifications(vehicle)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fBrakeForce", finalBraking)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMax", finalTractionMax)
     SetVehicleHandlingFloat(vehicle, "CHandlingData", "fTractionCurveMin", finalTractionMin)
+
+    local dragReduction = 1.0 - math.min(0.25, (tuneBonus.top_speed / 160.0))
+    SetVehicleHandlingFloat(vehicle, "CHandlingData", "fInitialDragCoeff", cache.fInitialDragCoeff * dragReduction)
     
     -- Apply drag reduction if top speed tune is active
     if tuneBonus.top_speed > 0 then
@@ -208,7 +211,7 @@ function ApplyPerformanceModifications(vehicle)
     -- Higher transmission bonuses = faster shifts
     local shiftBonus = tuneBonus.acceleration or 0
     if shiftBonus > 0 then
-        local shiftMult = 1.0 + (shiftBonus / 200.0)  -- Up to 50% faster shifts at max tune
+        local shiftMult = 1.0 + (shiftBonus / 100.0)  -- Much more aggressive shift speed
         SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleUpShift", cache.fClutchChangeRateScaleUpShift * shiftMult)
         SetVehicleHandlingFloat(vehicle, "CHandlingData", "fClutchChangeRateScaleDownShift", cache.fClutchChangeRateScaleDownShift * shiftMult)
     else
@@ -225,6 +228,10 @@ function ApplyPerformanceModifications(vehicle)
             SetVehicleMod(vehicle, i, GetVehicleMod(vehicle, i), false)
         end
     end
+
+    local enginePowerBuff = 1.0 + (tuneBonus.acceleration / 100.0) 
+    ModifyVehicleTopSpeed(vehicle, 1.0)
+    SetVehicleEnginePowerMultiplier(vehicle, enginePowerBuff)
     
     -- Force physics engine to apply changes
     ModifyVehicleTopSpeed(vehicle, 1.0)
@@ -232,7 +239,7 @@ function ApplyPerformanceModifications(vehicle)
     
     -- Set entity max speed (1.3x factor for handling-to-actual speed difference)
     -- fInitialDriveMaxFlatVel is in mph, convert to m/s
-    SetEntityMaxSpeed(vehicle, (finalTopSpeed * 1.3) / 2.236936)
+    SetEntityMaxSpeed(vehicle, (finalTopSpeed * 1.35) / 2.236936)
     SetVehicleMaxSpeed(vehicle, 0.0)
     
     appliedPlates[plate] = true

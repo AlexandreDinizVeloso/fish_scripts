@@ -15,49 +15,49 @@ HandlingEngine = {}
 -- Base reference values for a "neutral" stock vehicle
 local BASE_HANDLING = {
     -- Drive
-    fInitialDriveMaxFlatVel        = 70.0,   -- tuned for ~210 km/h class A esportivo
-    fInitialDriveForce             = 0.32,
-    fDriveInertia                  = 1.0,
-    fDriveBiasFront                = 0.5,    -- 0.0=RWD, 1.0=FWD, 0.5=AWD
-    nInitialDriveGears             = 6,      -- number of forward gears
-    fClutchChangeRateScaleUpShift  = 1.0,
-    fClutchChangeRateScaleDownShift = 1.0,
+    fInitialDriveMaxFlatVel        = 155.0,  -- Aligned with XMLs (midpoint between 148 and 162)
+    fInitialDriveForce             = 0.35,   -- Stock force baseline
+    fDriveInertia                  = 1.10,
+    fDriveBiasFront                = 0.35,   -- RWD-leaning AWD for better corner exit
+    nInitialDriveGears             = 6,      
+    fClutchChangeRateScaleUpShift  = 2.5,    -- Fast shifts based on XML (2.0 to 3.3)
+    fClutchChangeRateScaleDownShift = 2.5,
     -- Traction
-    fTractionCurveMax              = 2.55,
-    fTractionCurveMin              = 2.30,
-    fTractionCurveLateral          = 24.0,   -- lateral grip curve shape (degrees)
+    fTractionCurveMax              = 2.10,   -- Based on XMLs (1.80 to 2.40)
+    fTractionCurveMin              = 1.85,
+    fTractionCurveLateral          = 22.0,   
     fTractionLossMult              = 1.0,
-    fLowSpeedTractionLossMult      = 1.0,    -- burnout traction reduction
-    fTractionBiasFront             = 0.5,    -- front/rear grip distribution
-    fTractionSpringDeltaMax        = 0.15,   -- sidewall travel limit
-    fCamberStiffnesss              = 0.0,    -- camber force
+    fLowSpeedTractionLossMult      = 1.0,    
+    fTractionBiasFront             = 0.49,   
+    fTractionSpringDeltaMax        = 0.10,   
+    fCamberStiffnesss              = 0.0,    
     -- Steering
-    fSteeringLock                  = 35.0,
+    fSteeringLock                  = 40.0,   -- XMLs use 40-42
     -- Suspension
-    fSuspensionForce               = 2.2,
-    fSuspensionCompDamp            = 1.4,    -- compression damping
-    fSuspensionReboundDamp         = 1.2,    -- rebound damping
+    fSuspensionForce               = 2.6,    -- Firmer suspension based on XMLs (2.2 to 3.5)
+    fSuspensionCompDamp            = 1.5,    
+    fSuspensionReboundDamp         = 1.6,    
     fSuspensionDampingReboundSlow  = 0.25,
-    fSuspensionUpperLimit          = 0.10,   -- visual limit up
-    fSuspensionLowerLimit          = -0.12,  -- visual limit down
-    fSuspensionRaise               = 0.0,    -- body raise height
-    fSuspensionBiasFront           = 0.5,    -- front/rear suspension distribution
-    fAntiRollBarForce              = 0.5,    -- body roll resistance
-    fAntiRollBarBiasFront          = 0.5,    -- front/rear anti-roll bar
-    fRollCentreHeightFront         = 0.12,
-    fRollCentreHeightRear          = 0.12,
+    fSuspensionUpperLimit          = 0.10,   
+    fSuspensionLowerLimit          = -0.12,  
+    fSuspensionRaise               = 0.0,    
+    fSuspensionBiasFront           = 0.50,   
+    fAntiRollBarForce              = 0.4,    
+    fAntiRollBarBiasFront          = 0.50,   
+    fRollCentreHeightFront         = 0.25,   -- Increased stability from XMLs
+    fRollCentreHeightRear          = 0.25,
     -- Brakes
-    fBrakeForce                    = 0.7,
-    fBrakeBiasFront                = 0.5,
-    fHandBrakeForce                = 0.6,
+    fBrakeForce                    = 0.55,
+    fBrakeBiasFront                = 0.65,   -- Heavy front braking per XML
+    fHandBrakeForce                = 0.65,
     -- Body
     fMass                          = 1500.0,
-    fInitialDragCoeff              = 0.7,    -- aerodynamic drag
-    fDownForceModifier             = 1.0,    -- high-speed grip modifier
-    fPercentSubmerged              = 85.0,   -- water buoyancy %
-    fDeformationDamageMult         = 1.0,
+    fInitialDragCoeff              = 7.5,    -- Critical: Balanced drag (XMLs use 6.0 to 10.0)
+    fDownForceModifier             = 1.0,    
+    fPercentSubmerged              = 85.0,   
+    fDeformationDamageMult         = 0.8,
     fWeaponDamageMult              = 1.0,
-    fCollisionDamageMult           = 1.0,
+    fCollisionDamageMult           = 0.8,
     fEngineDamageMult              = 1.0,
 }
 
@@ -70,12 +70,12 @@ local BASE_HANDLING = {
 local ARCHETYPE_PROFILES = {
     esportivo = {
         -- High cornering, lightweight, limited top speed
-        fInitialDriveMaxFlatVel        = 0.87,
-        fInitialDriveForce             = 0.94,
+        fInitialDriveMaxFlatVel        = 1.02,
+        fInitialDriveForce             = 1.08,
         fDriveInertia                  = 1.10,
-        fTractionCurveMax              = 1.12,
-        fTractionCurveMin              = 1.08,
-        fTractionCurveLateral          = 0.90,  -- sharper lateral response
+        fTractionCurveMax              = 1.05,
+        fTractionCurveMin              = 1.02,
+        fTractionCurveLateral          = 1.05,  -- sharper lateral response
         fTractionLossMult              = 0.90,
         fLowSpeedTractionLossMult      = 0.85,
         fTractionBiasFront             = 0.52,  -- slight front bias
@@ -93,10 +93,10 @@ local ARCHETYPE_PROFILES = {
         fBrakeForce                    = 1.10,
         fBrakeBiasFront                = 0.48,
         fMass                          = 0.75,
-        fInitialDragCoeff              = 0.85,  -- low drag
+        fInitialDragCoeff              = 0.90,  -- low drag
         fDownForceModifier             = 1.15,  -- more grip at speed
-        fClutchChangeRateScaleUpShift  = 1.10,
-        fClutchChangeRateScaleDownShift = 1.10,
+        fClutchChangeRateScaleUpShift  = 1.15,
+        fClutchChangeRateScaleDownShift = 1.15,
         fDeformationDamageMult         = 1.40,
     },
     possante = {
@@ -368,9 +368,9 @@ local SUBARCHETYPE_TWEAKS = {
 -- ============================================================
 
 local function ScoreToPerformanceMultiplier(score)
-    -- PI 0 → 0.60x, PI 500 → 0.85x, PI 750 → 1.0x, PI 1000 → 1.25x (scales infinitely)
+    -- PI 0 -> 0.75x | PI 500 -> 1.0x | PI 750 (Class A) -> 1.125x | PI 1000 (Class S) -> 1.25x
     local normalized = math.max(0, score) / 1000.0
-    return 0.60 + (normalized * 0.65)
+    return 0.75 + (normalized * 0.50)
 end
 
 -- ============================================================

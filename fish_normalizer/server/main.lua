@@ -96,18 +96,33 @@ function PushVehicleState(netId, data, remapData, tuneData)
             if bonus.instability then
                 instability = instability + bonus.instability
             end
+            -- INCREASED WEIGHTS: Parts now drastically impact Class
             local ts = bonus.top_speed or 0
             local ac = bonus.acceleration or 0
             local hd = bonus.handling or 0
             local br = bonus.braking or 0
-            tunePI = tunePI + (ts * 3.0) + (ac * 3.0) + (hd * 2.5) + (br * 1.5)
+            tunePI = tunePI + (ts * 5.0) + (ac * 5.0) + (hd * 4.0) + (br * 2.0)
         end
     end
 
-    local finalScore = (data.score or 0) + math.floor(tunePI)
+    local remapPI = 0
+    if remapData and remapData.stat_adjustments then
+        local stats = type(remapData.stat_adjustments) == 'string' and json.decode(remapData.stat_adjustments) or remapData.stat_adjustments
+        remapPI = ((stats.top_speed or 0) * 5.0) + ((stats.acceleration or 0) * 5.0) + ((stats.handling or 0) * 4.0) + ((stats.braking or 0) * 2.0)
+    end
+
+    local finalScore = (data.score or 0) + math.floor(tunePI) + math.floor(remapPI)
+
+    local finalRank = 'D'
+    if finalScore >= 900 then finalRank = 'S'
+    elseif finalScore >= 750 then finalRank = 'A'
+    elseif finalScore >= 500 then finalRank = 'B'
+    elseif finalScore >= 300 then finalRank = 'C'
+    end
+
 
     entityState:set('fish:score',     finalScore,                  true)
-    entityState:set('fish:rank',      data.rank or 'C',            true)
+    entityState:set('fish:rank',      finalRank,                   true)
     entityState:set('fish:archetype', data.archetype or 'esportivo', true)
 
     if not HandlingEngine or not HandlingEngine.BuildHandlingProfile then
