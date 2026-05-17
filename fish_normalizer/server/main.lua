@@ -102,15 +102,31 @@ local function CalculateInstability(parts)
 end
 
 -- ============================================================
+-- ============================================================
 -- Calculate display PI = base normalization score + tune bonus + remap bonus
 -- ============================================================
+
+local function GetDampedPI(base_score)
+    local lowerBound = math.floor(base_score)
+    local upperBound = math.ceil(base_score)
+    
+    lowerBound = math.max(0, math.min(1000, lowerBound))
+    upperBound = math.max(0, math.min(1000, upperBound))
+    
+    if lowerBound == upperBound then
+        return PI_LUT[lowerBound] or 0.0
+    end
+    
+    -- O(1) Linear Interpolation in RAM to prevent floating-point Cache Misses
+    local weight = base_score - lowerBound
+    return (PI_LUT[lowerBound] or 0.0) * (1 - weight) + (PI_LUT[upperBound] or 0.0) * weight
+end
 
 local function CalculateDisplayScore(dbScore, tunePI, remapPI)
     local rawUpgrades = (tunePI or 0) + (remapPI or 0)
     if rawUpgrades <= 0 then return math.floor(dbScore) end
     
-    local baseIdx = math.max(0, math.min(1000, math.floor(dbScore)))
-    local scale = PI_LUT[baseIdx] or 0.0
+    local scale = GetDampedPI(dbScore)
     
     return math.max(0, math.min(1000, math.floor(dbScore + rawUpgrades * scale)))
 end

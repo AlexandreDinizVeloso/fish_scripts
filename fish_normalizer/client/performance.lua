@@ -317,6 +317,13 @@ function ApplyPerformanceModifications(vehicle)
         elseif driveBias == 1.0 then drivetrain = "FWD"
         else drivetrain = "AWD" end
     end
+
+    -- Physically apply drivetrain layout under network authority check to prevent physical simulation thrashing
+    if NetworkHasControlOfEntity(vehicle) and GetResourceState('fish_tunes') == 'started' then
+        pcall(function()
+            exports.fish_tunes:ApplyDrivetrainModifiers(vehicle, drivetrain)
+        end)
+    end
     
     local dtForceMult = 1.0
     local dtTopSpeedMult = 1.0
@@ -491,12 +498,21 @@ end
 
 -- ============================================================
 -- Pub-Sub Initialization: Wait for fish_tunes to load
+-- Subscribes and immediately detaches to prevent heap leaks/clutter
 -- ============================================================
-AddEventHandler('fish_tunes:modulesLoaded', function()
+local initHandler
+
+initHandler = AddEventHandler('fish_tunes:modulesLoaded', function()
     if isReady then return end
     isReady = true
     print('[fish_normalizer] Modules loaded event intercepted. PI Normalizer initialized and active.')
     TriggerServerEvent('fish_normalizer:requestPerformanceData')
+    
+    -- Immediately detach anonymous event handler pointer to clean LuaJIT heap memory
+    if initHandler then
+        RemoveEventHandler(initHandler)
+        initHandler = nil
+    end
 end)
 
 -- Fallback check in case fish_normalizer is restarted in-game
@@ -504,9 +520,17 @@ Citizen.CreateThread(function()
     Citizen.Wait(1000)
     if not isReady and GetResourceState('fish_tunes') == 'started' then
         Citizen.Wait(1000)
-        isReady = true
-        print('[fish_normalizer] Fallback ready state triggered on resource restart.')
-        TriggerServerEvent('fish_normalizer:requestPerformanceData')
+        if not isReady then
+            isReady = true
+            print('[fish_normalizer] Fallback ready state triggered on resource restart.')
+            TriggerServerEvent('fish_normalizer:requestPerformanceData')
+            
+            -- Clean up event handler if triggered by fallback
+            if initHandler then
+                RemoveEventHandler(initHandler)
+                initHandler = nil
+            end
+        end
     end
 end)
 
